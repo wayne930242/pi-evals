@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { scriptsDir } from "./findings.ts";
 import { observe } from "./observer.ts";
 import { context, mark, reportPath, runReport, statusText } from "./ops.ts";
 import { query, type View, VIEWS } from "./query.ts";
@@ -155,7 +156,7 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 				if (!VIEWS.includes(view)) throw new Error(`Unknown view "${view}". Views: ${VIEWS.join(", ")}.`);
 				if (params.since && !/^\d{4}-\d{2}-\d{2}$/.test(params.since)) throw new Error("since must be YYYY-MM-DD.");
 				const text = query(view, { since: params.since, project: params.project, env });
-				return { content: [{ type: "text", text }], details: { view, report: reportPath(env) } };
+				return { content: [{ type: "text", text }], details: { view, scriptsDir, report: reportPath(env) } };
 			},
 		});
 	};

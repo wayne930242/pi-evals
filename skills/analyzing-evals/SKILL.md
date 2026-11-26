@@ -7,7 +7,7 @@ description: Use when the user asks how their agents, skills or packages are doi
 
 1. Call `evals_query` with `view: "findings"` first. Check the dates and last extraction; default is the latest 30 UTC dates in the index. Use `since` or `project` when the question specifies a narrower scope.
 2. Follow **one** pointer that answers the question. For a weekly change in tool errors use `packages`; for a rule about editing use `process`. Keep the same filters. Stop when the numbers answer the question.
-3. If one detail is still missing, run one script below. Resolve `../../scripts` **from the directory containing this SKILL.md**, not from the user's checkout. Set `SCRIPTS` to that absolute path. Use exact identifiers returned by the view; none of these commands reads a transcript.
+3. If one detail is still missing, run one script below. Set `SCRIPTS` to the absolute path on the `Scripts:` line or in `details.scriptsDir`. For a default npm install, the fallback is `SCRIPTS="$HOME/.pi/agent/npm/node_modules/pi-evals/scripts"`. Check `test -f "$SCRIPTS/query-lib.mjs"` before running a query; if it fails, stop rather than guessing another path. Use exact identifiers returned by the view; none of these commands reads a transcript.
 
 ```sh
 node "$SCRIPTS/change-impact.mjs" UTC_TIMESTAMP_OR_SHA [PACKAGE_OR_KIND]

@@ -41,6 +41,7 @@ test("findings carries the report headline and verdicts, freshness, skill and cl
 	for (const re of [/<h1>([^<]+)<\/h1>/, /<p class="deck">([^<]+)<\/p>/, /<span class="verdict">([^<]+)<\/span>/]) {
 		const match = html.match(re); assert.ok(match); assert.ok(text.includes(match[1]), match[1]);
 	}
+	assert.ok(text.includes(new URL("../scripts", import.meta.url).pathname));
 	assert.match(text, /STALE.*2026-02-15/);
 	assert.match(text, /model-routing.*→ changes/);
 	assert.match(text, /1.*never loaded.*→ skills/);

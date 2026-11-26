@@ -1,9 +1,12 @@
+import { fileURLToPath } from "node:url";
 import type { DaysIndex } from "./build.ts";
 import type { ReportModel } from "./model.ts";
 import { overview, readings, value, verdict } from "./report/findings.ts";
 import { words } from "./report/format.ts";
 import { safeName } from "./schema.ts";
 import { weeklyRises } from "./trends.ts";
+
+export const scriptsDir = fileURLToPath(new URL("../scripts", import.meta.url));
 
 /** Shorten only identifiers, never a verdict or its drill-down pointer. */
 function name(s: string) {
@@ -16,7 +19,7 @@ export function findings(m: ReportModel, index: DaysIndex) {
 	const { headline, trust, highlighted } = overview(m, "en"), L = words("en");
 	const lines = [
 		`${m.window.since ?? "?"}..${m.window.until ?? "?"} UTC${m.window.project ? ` · ${name(m.window.project)}` : ""} · ${m.freshness.stale ? "STALE: " : ""}last extract ${m.freshness.lastExtract ?? "never"} → coverage`,
-		`${headline} → changes`, `${trust} → changes`,
+		`Scripts: ${scriptsDir}`, `${headline} → changes`, `${trust} → changes`,
 	];
 	const extras: { line: number; prefix: string; metric: string }[] = [];
 	for (const c of highlighted) {
