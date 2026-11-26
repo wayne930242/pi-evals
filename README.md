@@ -49,6 +49,7 @@ The observer loads in every session, subagents included.
 | `/evals mark <note>` | Adds a note to the change timeline, e.g. `/evals mark workers moved to gpt-6.2-astra`. |
 | `/evals label` | Labels the current session while the work is in front of you: pick a rule (or 「其他」), then 照做, 沒照做 or 看不出來, then an optional note in your own words. |
 | `/evals label <rule> pass\|fail\|unclear [note]` | The same in one line; `<rule>` is a check name (`anchor_before_first_edit`, `check_after_last_edit`, `todo_evidence`, `close_guard_quiet`) or `other`. |
+| `/evals label <your words>` | Anything else, e.g. `/evals label 剛剛沒先跑測試就說完成`: the agent turns your words into labels with `evals_label` and says in one line what it recorded. The verdict is yours and your words are kept as the note. |
 | `/evals label undo` | Withdraws the current session's last label given in the moment. |
 
 A label records the session, the time, and the key of the todo item in progress, if any (its `uid`, else `<session>#<id>`, as work items are keyed).
@@ -81,7 +82,9 @@ The tool never starts an extract.
 When you correct how an agent worked (it skipped a check, worked in the wrong order, ignored a rule), it calls `evals_label` once with `rule` (a check name or `other`) and an optional `type`: `no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction` or `other`.
 The row also keeps the session, the time, the item in progress, and the skills the session had loaded.
 The count covers corrections the agent logged, not all its mistakes.
-The tool adds about 590 bytes of tool text to each session.
+During a turn started by `/evals label <your words>`, the agent passes `on_behalf: "user"` and your verdict (`label`: `pass`, `fail` or `unclear`); that row is your label, not a correction.
+At any other time `on_behalf` is refused, and the agent's own label can only be a fail.
+The tool adds about 690 bytes of tool text to each session.
 
 ## The report
 

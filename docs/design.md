@@ -118,8 +118,9 @@ A label given while the work is in front of the user does not have that problem,
 `/evals label` asks three plain questions (which rule, followed or not, an optional note) and needs no arguments; the one-line form is for speed.
 A label is tied to the session and the todo item in progress, keyed as back-filled work items are, so it can later join the item.
 `undo` appends a withdrawal instead of rewriting the file, so a label another session appends at the same moment cannot be lost.
+`/evals label <your words>` (「/evals label 後面應該允許接 prompt。要求 agent 根據格式標注」) sends the words to the agent, which formats them into rows; the command, not the agent, supplies the note, and the right to write a human row (`on_behalf: "user"`) opens when that turn starts and closes at its end.
 
-The agent's `evals_label` takes two enumerated names and nothing else, and its tool text stays near 590 bytes, since every session pays for it.
+The agent's `evals_label` takes enumerated names and nothing else, and its tool text stays near 690 bytes, since every session pays for it.
 Its rows never enter the agreement: an agent's own account of being corrected is not a verdict on the code.
 They are counted as 「被糾正」 by rule, failure type, the skills loaded before the correction, and the anchorloop version at the time.
 The count covers corrections that were logged, not every mistake; with fewer than 20, the report says it is too few to show a trend.

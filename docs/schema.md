@@ -65,14 +65,15 @@ There are three kinds of rows:
 
 - A row without `source` is a human verdict given after the fact (the report calls it 事後標, the code `batch`).
 - `source: "live"` is a human verdict given in the moment with `/evals label`. `/evals label undo` appends `{ …, "source": "live", "undo": "<at of the withdrawn row>" }`, which withdraws the session's latest live row still in effect.
-- `source: "correction"` is an agent's `evals_label` call: `label` is always `fail`, and `type` is one of `no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction`, `other`. The tool accepts no other field or value.
+- `source: "live-prompt"` is a human verdict too: the user's words after `/evals label`, which the agent turned into rows with `evals_label` and `on_behalf: "user"` during the turn those words started. The note is the user's words, taken from the command, never from the agent.
+- `source: "correction"` is an agent's `evals_label` call: `label` is always `fail`, and `type` is one of `no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction`, `other`. The tool accepts no other field or value, and refuses `on_behalf` outside such a turn.
 
 `evaluation_name` is a process check name or `other`.
 `label` is `pass`, `fail`, or `unclear` (the reader could not tell).
 `item` is the key of the todo item in progress when the label was given: its `uid`, else `<origin session>#<id>` for a task carried over from another session, else `<session>#<id>`.
-`note` is the only free text and is never shown in the report or a query result.
+`note` is the only free text, always the user's own words, and is never shown in the report or a query result.
 
-The report joins human rows with `index/session-evals.json` (the code labels per session) and shows how often they agree, by when the labels were given.
+The report joins human rows with `index/session-evals.json` (the code labels per session) and shows how often they agree, by when the labels were given (`live` and `live-prompt` both count as in the moment).
 `unclear` labels are left out of the agreement rate and counted on their own (「看不出來 N」); labels on `other`, or on a session the code has not judged, are counted apart.
 Agent rows never enter the agreement; they make the 「被糾正」 section.
 With a date or project filter, a row belongs to the range by its session's start when the session is indexed, and by its own `at` and `project` otherwise.
