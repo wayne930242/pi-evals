@@ -1,5 +1,4 @@
-import { safeName } from '../dist/schema.js';
-import { QueryError, report, run } from './query-lib.mjs';
+import { QueryError, report, run, safeName } from './query-lib.mjs';
 
 const usage = 'node change-impact.mjs UTC_TIMESTAMP_OR_SHA [PACKAGE_OR_KIND]';
 run(usage, args => {

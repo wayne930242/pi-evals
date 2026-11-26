@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { layout } from '../dist/paths.js';
-import { loadIndex } from '../dist/build.js';
-import { recentDays } from '../dist/trends.js';
-import { safeName } from '../dist/schema.js';
+// Node strips types in checkouts but forbids it under node_modules. npm ships dist there.
+const installed = new URL(import.meta.url).pathname.split('/').includes('node_modules');
+const load = name => import(installed ? `../dist/${name}.js` : `../src/${name}.ts`);
+const [{ layout }, { loadIndex }, { recentDays, packageCounts }, { safeName }] = await Promise.all(
+	['paths', 'build', 'trends', 'schema'].map(load),
+);
+export { packageCounts, safeName };
 
 export function run(usage, fn) {
 	try {

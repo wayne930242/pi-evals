@@ -1,5 +1,4 @@
-import { packageCounts } from '../dist/trends.js';
-import { daily, QueryError, run } from './query-lib.mjs';
+import { daily, packageCounts, QueryError, run } from './query-lib.mjs';
 
 const usage = 'node package-errors.mjs PACKAGE [PROJECT]';
 run(usage, args => {
