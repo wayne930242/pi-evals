@@ -142,6 +142,15 @@ function liteOf(raw: unknown): TaskLite | undefined {
 	};
 }
 
+/** A task's own key: its uid, else `<origin session>#<id>` for a task handed over from another session. */
+const ownKey = (task: TaskLite) => task.uid ?? (task.origin ? `${task.origin}#${task.id}` : undefined);
+
+/** The key of the task in progress in a live todo list, as the back-fill keys it on the session's main branch. */
+export function liveItemKey(tasks: readonly unknown[], session: string): string | undefined {
+	const task = tasks.map(liteOf).find((x) => x?.status === "in_progress");
+	return task && (ownKey(task) ?? `${session}#${task.id}`);
+}
+
 /** The kind of stall a waking entry ends, or undefined when the entry does not start a turn. */
 export function wakeOf(entry: Obj): { kind: StallKind; on?: string } | undefined {
 	const type = entry.type;
@@ -346,8 +355,8 @@ export class WorkTracker {
 
 	private newItem(session: string, nested: boolean, task: TaskLite, snap: Snapshot, si: number, main: Set<number>, reuse: Map<number, number>): ItemRaw {
 		let key: string;
-		if (task.uid) key = task.uid;
-		else if (task.origin) key = `${task.origin}#${task.id}`;
+		const own = ownKey(task);
+		if (own) key = own;
 		else if (main.has(si)) {
 			const count = (reuse.get(task.id) ?? 0) + 1;
 			reuse.set(task.id, count);

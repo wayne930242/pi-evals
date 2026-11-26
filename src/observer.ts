@@ -8,7 +8,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { Layout } from "./paths.ts";
 import { ownerOf } from "./owners.ts";
 import { projectKey } from "./project.ts";
-import { type Attrs, type EvalRecord, NAMES, record, type SkillTrigger, spanId, traceId } from "./schema.ts";
+import { type Attrs, type EvalRecord, NAMES, record, safeName, type SkillTrigger, spanId, traceId } from "./schema.ts";
 import { skillFromPath, skillsFromBlocks, skillsFromCommand } from "./skills.ts";
 import { liveWriter } from "./store.ts";
 import { logicalIdOf } from "./extract/session.ts";
@@ -30,7 +30,12 @@ export interface ObserverOptions {
 	now?: () => number;
 }
 
-export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
+/** What the session has done so far that a label needs: the skills it loaded. */
+export interface Observed {
+	skills(): string[];
+}
+
+export function observe(pi: ExtensionAPI, options: ObserverOptions): Observed {
 	const now = options.now ?? Date.now;
 	let sessionId = "";
 	let project = "unknown";
@@ -44,13 +49,16 @@ export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 	let unsubscribe: (() => void)[] = [];
 	let write: (r: EvalRecord | EvalRecord[]) => void = () => {};
 	let hasUI = false;
+	let loaded = new Set<string>();
 
 	const iso = (t: number) => new Date(t).toISOString();
 	const base = (): Attrs => ({ "session.id": sessionId, "pi.project": project });
 	const emit = (fields: Parameters<typeof record>[0]) => write(record(fields));
 
-	const skillLoad = (skill: string, trigger: SkillTrigger, callId?: string) =>
+	const skillLoad = (skill: string, trigger: SkillTrigger, callId?: string) => {
+		loaded.add(skill);
 		emit({ name: NAMES.skill, kind: "event", ts: iso(now()), source: "live", trace_id: trace, attrs: { ...base(), "gen_ai.skill.name": skill, "pi.skill.trigger": trigger, "gen_ai.tool.call.id": callId } });
+	};
 
 	const snapshot = () => {
 		if (snapshotTaken) return;
@@ -113,6 +121,7 @@ export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 		remoteAnswers = new Set();
 		monitorStarts = new Map();
 		monitorsDone = new Set();
+		loaded = new Set();
 		let file: string | undefined;
 		try {
 			file = ctx.sessionManager.getSessionFile?.();
@@ -252,4 +261,5 @@ export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 			attrs,
 		});
 	});
+	return { skills: () => [...new Set([...loaded].map((name) => safeName(name)))].filter((n) => n !== "redacted").sort() };
 }

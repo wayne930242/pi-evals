@@ -1,5 +1,5 @@
 /**
- * pi-evals: the live observer, the `/evals` command (status, extract, report, mark), and the `evals_query` tool.
+ * pi-evals: the live observer, the `/evals` command (status, extract, report, mark, label), and the `evals_query` and `evals_label` tools.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { scriptsDir } from "./findings.ts";
+import { liveLabels } from "./live-labels.ts";
 import { observe } from "./observer.ts";
 import { context, mark, reportPath, runReport, statusText } from "./ops.ts";
 import { query, type View, VIEWS } from "./query.ts";
@@ -23,7 +24,7 @@ export function cliPath(): { cmd: string; args: string[] } | undefined {
 	return found ? { cmd: process.execPath, args: [found] } : undefined;
 }
 
-const SUBCOMMANDS = ["status", "findings", "extract", "report", "mark"];
+const SUBCOMMANDS = ["status", "findings", "extract", "report", "mark", "label"];
 
 function parseFlags(args: string[]) {
 	const out: { since?: string; days?: number; project?: string; rest: string[] } = { rest: [] };
@@ -41,7 +42,8 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 	const spawnFn = options.spawnExtract ?? spawn;
 	return function evals(pi: ExtensionAPI): void {
 		const ctx0 = context(env);
-		observe(pi, { layout: ctx0.layout, home: ctx0.home, now: options.now });
+		const observed = observe(pi, { layout: ctx0.layout, home: ctx0.home, now: options.now });
+		const labels = liveLabels(pi, { env, now: options.now ?? Date.now, observed });
 		let settingsWarned = false;
 		pi.on("session_start", (_event, ctx) => {
 			if (settingsWarned || !ctx0.settings.error) return;
@@ -96,7 +98,7 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		};
 
 		pi.registerCommand("evals", {
-			description: "Usage and process records: /evals [status|findings|extract|report|mark <note>]",
+			description: "Usage and process records: /evals [status|findings|extract|report|mark <note>|label]",
 			getArgumentCompletions: (prefix: string) => {
 				const items = SUBCOMMANDS.filter((s) => s.startsWith(prefix)).map((s) => ({ value: s, label: s }));
 				return items.length ? items : null;
@@ -135,6 +137,8 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 					}
 					const change = mark(text, env);
 					ctx.ui.notify(`pi-evals: marked ${change.at}: ${text}`, "info");
+				} else if (sub === "label") {
+					await labels.command(words.slice(1), ctx);
 				} else {
 					ctx.ui.notify(`Unknown subcommand "${sub}". Use: ${SUBCOMMANDS.join(", ")}.`, "warning");
 				}
