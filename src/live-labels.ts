@@ -21,7 +21,7 @@ export function promptFor(words: string): string {
 	return [
 		"[/evals label] Below, in the user's own words, is the user's verdict on how this session's work followed the process rules.",
 		`Record it with evals_label, once per rule the words judge: on_behalf "user", rule (one of ${RULES.join(", ")}), label as the user judged it (pass, fail or unclear), and type when it is a fail.`,
-		"Record only what the user said, add no judgement of your own, then confirm in one line what you recorded.",
+		"Record only what the user said, add no judgement of your own, then confirm in one line, in plain words and the user's language, what you recorded.",
 		"",
 		`User's words: ${words}`,
 	].join("\n");
