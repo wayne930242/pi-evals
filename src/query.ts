@@ -1,11 +1,12 @@
 /** `evals_query`: bounded plain-text summaries of the index for an agent (names and numbers only, under 2 KB). */
 import { coverageInRange, indexedModel, reportPath } from "./ops.ts";
 import { findings } from "./findings.ts";
+import { labelsView } from "./labels-query.ts";
 import { select } from "./report/findings.ts";
 import type { Rate } from "./model.ts";
 import { itemsView } from "./work/query.ts";
 
-export const VIEWS = ["findings", "items", "skills", "packages", "ask_user", "monitors", "subagents", "process", "cost", "changes", "coverage"] as const;
+export const VIEWS = ["findings", "items", "labels", "skills", "packages", "ask_user", "monitors", "subagents", "process", "cost", "changes", "coverage"] as const;
 export type View = (typeof VIEWS)[number];
 export const MAX_BYTES = 1900;
 
@@ -88,6 +89,8 @@ export function query(view: View, options: { since?: string; days?: number; proj
 		for (const s of m.cost.bySkill.slice(0, 10)) body.push(`${s.skill}: $${s.cost} over ${s.sessions} sessions`);
 	} else if (view === "items") {
 		body.push(...itemsView(m.work));
+	} else if (view === "labels") {
+		body.push(...labelsView(m));
 	} else if (view === "changes") {
 		body.push("highlighted then newest changes, sessions split at the change time, metric before -> after; flags: small = <20 sessions a side, incomplete = a window runs past the data, confounded = other commits nearby");
 		const { highlighted, folded } = select(m);

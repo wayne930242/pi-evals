@@ -7,11 +7,14 @@ import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-age
 import { emptyDay, type SessionRow } from "../src/aggregate.ts";
 import type { DaysIndex } from "../src/build.ts";
 import type { Change } from "../src/changes.ts";
+import { findings } from "../src/findings.ts";
 import { createEvals } from "../src/index.ts";
+import { labelsView } from "../src/labels-query.ts";
 import { readLabels } from "../src/labels.ts";
 import { buildModel } from "../src/model.ts";
 import { renderHtml } from "../src/render.ts";
 import { setKnownProjects } from "../src/project.ts";
+import { VIEWS } from "../src/query.ts";
 import { traceId } from "../src/schema.ts";
 import { SECRET, todo } from "./fixtures.ts";
 
@@ -271,4 +274,23 @@ test("the report splits your labels by when they were given, explains it, and sh
 	assert.match(html, /3\.3\.0/);
 	assert.ok(!html.includes("只有我看得到的話"), "a note stays in the labels file");
 	assert.match(renderHtml(m, "en"), /Times the agent was corrected/);
+});
+
+test("the labels view and a findings line give names and numbers, never a note", () => {
+	const rows = [
+		human("s1", "anchor_before_first_edit", "pass", { note: SECRET }),
+		human("s3", "anchor_before_first_edit", "pass", { source: "live", note: SECRET }),
+		...[1, 2, 3].map((i) => agent("s1", "check_after_last_edit", { type: "no_check_run", at: `2026-11-26T0${i}:00:00.000Z` })),
+		agent("s2", "other"),
+	];
+	const m = labelled(rows);
+	const view = labelsView(m).join("\n");
+	assert.match(view, /after the fact 1 \(1 sessions\), in the moment 1 \(1 sessions\)/);
+	assert.match(view, /anchor_before_first_edit: 2\/2 \(1\/1; 1\/1\)/);
+	assert.match(view, /4 in 2 sessions; small/);
+	assert.match(view, /by rule\/type: check_after_last_edit\/no_check_run 3, other\/other 1/);
+	assert.ok(!view.includes("PLANTED"));
+	assert.match(findings(m), /Corrections logged: 3 of 4 are check_after_last_edit\/no_check_run .*→ labels/);
+	assert.doesNotMatch(findings(labelled(rows.slice(0, 4))), /Corrections logged/, "two of a kind is not a cluster");
+	assert.ok(VIEWS.includes("labels"));
 });

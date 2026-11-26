@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { correctionsFinding } from "./labels-query.ts";
 import type { ReportModel } from "./model.ts";
 import { overview, readings, value, verdict } from "./report/findings.ts";
 import { words } from "./report/format.ts";
@@ -38,6 +39,8 @@ export function findings(m: ReportModel) {
 	lines.push(`Cleanup (all projects/dates): ${gate} → coverage`);
 	const work = itemsFinding(m.work);
 	if (work) lines.push(work);
+	const corrected = correctionsFinding(m);
+	if (corrected) lines.push(corrected);
 	const w = m.weekly;
 	if (!w) lines.push("Need two weeks in range for error trends → packages / monitors");
 	else {
