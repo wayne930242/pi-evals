@@ -13,7 +13,7 @@ export function labelsView(m: ReportModel): string[] {
 	const c = l.corrections;
 	const out = [
 		"human labels = your verdicts on a rule; after the fact (batch) or in the moment (/evals label)",
-		`human: after the fact ${l.bySource.batch} (${l.sessions.batch} sessions), in the moment ${l.bySource.live} (${l.sessions.live} sessions); unclear ${l.unclear}; no code verdict ${l.noCode}; on other ${l.other}`,
+		`human: after the fact ${l.bySource.batch} (${l.sessions.batch} sessions), in the moment ${l.bySource.live} (${l.sessions.live} sessions${l.fromWords ? `; ${l.fromWords} formatted by the agent from your words` : ""}); unclear ${l.unclear}; no code verdict ${l.noCode}; on other ${l.other}`,
 		"code vs human, agreed/compared (after the fact; in the moment):",
 	];
 	for (const a of l.agreement) out.push(`${a.detector}: ${ratio(a)} (${ratio(a.bySource.batch)}; ${ratio(a.bySource.live)})`);

@@ -31,12 +31,12 @@ export function liveLabels(pi: ExtensionAPI, options: { env: Env; now: () => num
 	const { env, now, observed } = options;
 	/** The user's words waiting for their turn to start, and the turn that may speak for the user. */
 	let waiting: { session: string; prompt: string; note?: string } | undefined;
-	let speaking: { session: string; note?: string } | undefined;
+	let speaking: { session: string; prompt: string; note?: string } | undefined;
 	const textOf = (content: unknown) =>
 		typeof content === "string" ? content : Array.isArray(content) ? content.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") : "";
 	const start = (text: string | undefined) => {
 		if (waiting && text === waiting.prompt) {
-			speaking = { session: waiting.session, note: waiting.note };
+			speaking = { ...waiting };
 			waiting = undefined;
 		}
 	};
@@ -44,7 +44,11 @@ export function liveLabels(pi: ExtensionAPI, options: { env: Env; now: () => num
 	// A prompt queued behind a running turn starts its own run without before_agent_start: its user message opens it.
 	pi.on("message_end", (event) => {
 		const message = (event as { message?: { role?: string; content?: unknown } }).message;
-		if (message?.role === "user") start(textOf(message.content));
+		if (message?.role !== "user") return;
+		const text = textOf(message.content);
+		// Another message from the user in the same run is not part of the words the agent is formatting.
+		if (speaking && text !== speaking.prompt) speaking = undefined;
+		start(text);
 	});
 	pi.on("agent_end", () => {
 		speaking = undefined;

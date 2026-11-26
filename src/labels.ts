@@ -160,7 +160,7 @@ const bump = <K>(map: Map<K, number>, key: K) => map.set(key, (map.get(key) ?? 0
  * moment, before an extract) belongs by its own time and project.
  */
 export function labelsModel(labelsFile: string, evalsFile: string, scope: LabelScope, versionOf: (at: string) => string | undefined) {
-	const empty = { present: false, n: 0, unclear: 0, bySource: { batch: 0, live: 0 }, sessions: { batch: 0, live: 0 }, noCode: 0, other: 0, agreement: [] as Agreement[], corrections: corrections([], versionOf) };
+	const empty = { present: false, n: 0, unclear: 0, bySource: { batch: 0, live: 0 }, fromWords: 0, sessions: { batch: 0, live: 0 }, noCode: 0, other: 0, agreement: [] as Agreement[], corrections: corrections([], versionOf) };
 	if (!existsSync(labelsFile)) return empty;
 	const code = existsSync(evalsFile) ? (JSON.parse(readFileSync(evalsFile, "utf8")) as Record<string, Record<string, string>>) : {};
 	const inDates = (at: string) => (!scope.since || at.slice(0, 10) >= scope.since) && (!scope.until || at.slice(0, 10) <= scope.until);
@@ -178,6 +178,7 @@ export function labelsModel(labelsFile: string, evalsFile: string, scope: LabelS
 	for (const row of human) {
 		const source = givenLive(row) ? "live" : "batch";
 		out.bySource[source] += 1;
+		if (row.source === "live-prompt") out.fromWords += 1;
 		sessions[source].add(row.session_id);
 		if (row.evaluation_name === "other") {
 			out.other += 1;

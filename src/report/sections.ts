@@ -159,7 +159,9 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 		L("Your labels", "你的標記"),
 		meta.agreement.meaning[lang],
 		lb.needsIndex ? `<p>${L("Run /evals extract to count labels in this period.", "請執行 /evals extract 以計算這段期間的標記。")}</p>` : lb.present && lb.n
-			? `<p>${L(`After the fact ${num(lb.bySource.batch)} (${num(lb.sessions.batch)} sessions)　／　In the moment ${num(lb.bySource.live)} (${num(lb.sessions.live)} sessions)`, `事後標 ${num(lb.bySource.batch)} 筆（${num(lb.sessions.batch)} 段工作）　／　當下標 ${num(lb.bySource.live)} 筆（${num(lb.sessions.live)} 段工作）`)}</p>` +
+			? `<p>${L(`After the fact ${num(lb.bySource.batch)} (${num(lb.sessions.batch)} sessions)　／　In the moment ${num(lb.bySource.live)} (${num(lb.sessions.live)} sessions)`, `事後標 ${num(lb.bySource.batch)} 筆（${num(lb.sessions.batch)} 段工作）　／　當下標 ${num(lb.bySource.live)} 筆（${num(lb.sessions.live)} 段工作）`)}${
+				lb.fromWords ? L(`; ${num(lb.fromWords)} of them the agent wrote from your words`, `；其中 ${num(lb.fromWords)} 筆是代理人依你的話整理的`) : ""
+			}</p>` +
 				T(
 					[L("Check", "檢查"), L("Agreement", "一致比例"), L("After the fact: agreed / compared", "事後標：一致 / 比對"), L("In the moment: agreed / compared", "當下標：一致 / 比對"), L("Cannot tell", "看不出來")],
 					lb.agreement.map((r) => [rule(r.detector), `${pct(r.rate)}（${num(r.n)}）`, pair(r.bySource.batch), pair(r.bySource.live), r.unclear]),
