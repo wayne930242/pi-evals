@@ -3,6 +3,8 @@ import type { Checkpoint } from "./extract/run.ts";
 import { listSessionFiles } from "./extract/run.ts";
 
 export interface Coverage {
+	/** Files whose modification date falls in the selected report dates (all projects). */
+	inRange?: { files: number; indexed: number };
 	cutDays: number;
 	cutoff: string;
 	old: { files: number; bytes: number };
@@ -13,7 +15,7 @@ export interface Coverage {
 	retainedGone: number;
 }
 
-export function coverage(roots: string[], checkpoint: Checkpoint, cutDays: number, now = Date.now()): Coverage {
+export function coverage(roots: string[], checkpoint: Checkpoint, cutDays: number, now = Date.now(), activity?: Map<string, { files: number; indexed: number }>): Coverage {
 	const cutoff = now - cutDays * 86_400_000;
 	const files = listSessionFiles(roots);
 	const result: Coverage = {
@@ -32,6 +34,11 @@ export function coverage(roots: string[], checkpoint: Checkpoint, cutDays: numbe
 		const known = checkpoint.files[f.path];
 		const fresh = !!known && known.size === f.size && known.mtimeMs === f.mtimeMs;
 		if (fresh) result.all.indexedFiles += 1;
+		if (activity) {
+			const day = new Date(f.mtimeMs).toISOString().slice(0, 10), row = activity.get(day) ?? { files: 0, indexed: 0 };
+			row.files++; if (fresh) row.indexed++;
+			activity.set(day, row);
+		}
 		if (f.mtimeMs >= cutoff) continue;
 		result.old.files += 1;
 		result.old.bytes += f.size;

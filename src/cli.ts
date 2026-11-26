@@ -5,7 +5,7 @@ import { query, type View, VIEWS } from "./query.ts";
 
 const USAGE = `usage:
   pi-evals extract [--root <dir>]... [--workers <n>] [--json]
-  pi-evals report [--out <dir>] [--since YYYY-MM-DD] [--project <key>] [--lang zh|en]
+  pi-evals report [--out <dir>] [--since YYYY-MM-DD | --days N] [--project <key>] [--lang zh|en]
   pi-evals status
   pi-evals query <${VIEWS.join("|")}> [--since YYYY-MM-DD] [--project <key>]
   pi-evals mark <note>`;
@@ -49,7 +49,7 @@ async function main(argv: string[]): Promise<number> {
 	}
 	if (cmd === "report") {
 		const lang = flag(args, "--lang") === "en" ? "en" : "zh";
-		const out = runReport({ outDir: flag(args, "--out"), filter: { since: flag(args, "--since"), project: flag(args, "--project") }, lang });
+		const out = runReport({ outDir: flag(args, "--out"), filter: { since: flag(args, "--since"), days: args.includes("--days") ? Number(flag(args, "--days")) : undefined, project: flag(args, "--project") }, lang });
 		if (!out) {
 			console.error("nothing extracted yet: run pi-evals extract");
 			return 1;

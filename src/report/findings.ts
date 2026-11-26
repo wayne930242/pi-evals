@@ -67,6 +67,24 @@ export function select(m: ReportModel) {
 	const highlighted = all.filter((c) => c === lead || c === second);
 	return { all, lead, highlighted, folded: all.filter((c) => !highlighted.includes(c)) };
 }
+/** Editorial choices shared by the HTML timeline and the compact query. */
+export function overview(m: ReportModel, lang: Lang) {
+	const selected = select(m), { lead, all } = selected, L = words(lang);
+	const rs = lead ? readings(lead, m, lang) : [];
+	const headline = lead ? finding(lead, rs, L) : all.length
+		? L("Not enough sessions to compare changes yet", "這批調整的工作段數還不夠比較")
+		: L("No changes recorded in this period", "這段期間沒有調整紀錄");
+	const i = lead?.impact;
+	const trust = i?.incomplete && i.confounded && !i.smallSample ? L(
+		`There were ${num(i.confounded)} other changes, and one side has less than ${i.window.days} days of data. We cannot credit this change alone.`,
+		`同期還有 ${num(i.confounded)} 筆別的調整，一側的資料也未滿 ${i.window.days} 天；目前不能把差異歸給這次調整。`,
+	) : lead ? verdict(lead, rs, L) : L(
+		`There are ${num(m.totals.sessions)} sessions in this report, but no eligible comparison.`,
+		`報表收錄 ${num(m.totals.sessions)} 段工作，目前沒有適合放在首頁的比較。`,
+	);
+	return { ...selected, headline, trust };
+}
+
 export function finding(c: Change, rs: Reading[], L: Words) {
 	const r = rs.find(comparable);
 	if (!r) return L("There are not enough records to compare this change", "這次調整還沒有足夠紀錄可比較");

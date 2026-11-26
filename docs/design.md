@@ -93,6 +93,21 @@ The renderer makes the following editorial choices from the model, without consu
 - The workload chart covers the last seven complete UTC dates in the report period (or fewer if the filter starts later), not seven nonempty days. Each marker means at least one change that day. Session and tool totals in the other sections still cover the selected report period.
 - Each detail uses the model’s actual window and session counts. Dates with records may exceed seven in a seven-day window that starts mid-day. The ruler shows the last extract only when it falls inside the after window, and its segments are not to scale.
 
+### Date ranges and findings (0.3.0)
+
+The 30-day page opens first; the other pages cover 14 days, 90 days or all indexed dates.
+The last day is the UTC date of extraction, even when the extract is old, so a stale index does not become an apparently quiet month.
+The chart now covers the selected period including the partial last day.
+The report reads the index and checks file coverage once, then reuses the same change comparisons in each narrower period.
+The set of currently offered skills is the reference list; “never loaded” means no loads in the selected dates and project, not that the skill has never been used.
+Coverage counts files modified in the chosen dates and separately shows the cleanup gate across all dates and projects.
+
+`findings` uses the timeline’s headline, trust line, selection and verdicts, without copying the text of a commit or manual note.
+For error trends it compares the two seven-day periods immediately before the extraction date, excluding the partial day, only if both weeks fit inside the selection and the index extends to the first date.
+It counts tool errors over calls per package and job endings marked `error` over all recorded endings; both weeks need at least 20 observations and a rise of at least five percentage points.
+If several packages qualify, the largest rise wins, then the larger recent call count, then the package name.
+No flag means no rise met that rule, not proof that nothing went wrong.
+
 ### Storage choices
 
 JSON lines and JSON files, no database: the index is rebuilt from per-session summaries in about a second, and the reader needs no service (research §4: everything reduces to files plus one static page).

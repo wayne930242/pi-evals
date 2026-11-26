@@ -5,7 +5,8 @@ import { buildIndex, loadIndex, loadRows } from "./build.ts";
 import { addMark, readChanges } from "./changes.ts";
 import { coverage } from "./coverage.ts";
 import { extract, loadCheckpoint, type Progress } from "./extract/run.ts";
-import { buildModel, type Filter } from "./model.ts";
+import { PRESETS, type Preset, rangeFilter, suffix } from "./ranges.ts";
+import { buildModel, type Filter, type ReportModel } from "./model.ts";
 import { agentDir, home, layout, loadSettings, stateDir } from "./paths.ts";
 import { renderHtml, type Lang } from "./render.ts";
 
@@ -52,34 +53,60 @@ export function coverageNow(env?: Env, cutDays?: number) {
 	return coverage(ctx.roots, loadCheckpoint(ctx.layout.checkpoint), cutDays ?? ctx.settings.coverageDays);
 }
 
+type RangeInput = Filter & { days?: number };
+function coverageReader(ctx: ReturnType<typeof context>, now: Date) {
+	const activity = new Map<string, { files: number; indexed: number }>();
+	const cov = coverage(ctx.roots, loadCheckpoint(ctx.layout.checkpoint), ctx.settings.coverageDays, now.getTime(), activity);
+	return (filter: Filter) => {
+		const inRange = { files: 0, indexed: 0 };
+		for (const [day, a] of activity) if ((!filter.since || day >= filter.since) && (!filter.until || day <= filter.until)) {
+			inRange.files += a.files; inRange.indexed += a.indexed;
+		}
+		return { ...cov, inRange };
+	};
+}
+export function coverageInRange(input: RangeInput, env?: Env) {
+	const ctx = context(env), now = new Date(), last = loadIndex(ctx.layout)?.lastExtract;
+	const filter = rangeFilter(input, last ?? now.toISOString());
+	return { filter, last, coverage: coverageReader(ctx, now)(filter) };
+}
+function snapshot(env?: Env, withCoverage = true) {
+	const ctx = context(env), index = loadIndex(ctx.layout);
+	if (!index) return;
+	const rows = loadRows(ctx.layout), changes = readChanges(ctx.layout.changes), now = new Date();
+	const cov = withCoverage ? coverageReader(ctx, now) : undefined;
+	return { index, build(input: RangeInput, preset: Preset, comparisons?: ReportModel["changes"]) {
+		const filter = rangeFilter(input, index.lastExtract ?? now.toISOString(), preset);
+		return buildModel({ index, rows, changes, comparisons, filter, now, windowDays: ctx.settings.impactWindowDays,
+			labelsFile: ctx.layout.labels, sessionEvalsFile: ctx.layout.sessionEvals, coverage: cov?.(filter) });
+	} };
+}
+export function indexedModel(filter: RangeInput, env?: Env, withCoverage = true) {
+	const data = snapshot(env, withCoverage);
+	return data && { report: data.build(filter, 30), index: data.index };
+}
+
 export function model(filter: Filter, env?: Env, withCoverage = true) {
-	const ctx = context(env);
-	const index = loadIndex(ctx.layout);
-	if (!index) return undefined;
-	return buildModel({
-		index,
-		rows: loadRows(ctx.layout),
-		changes: readChanges(ctx.layout.changes),
-		filter,
-		windowDays: ctx.settings.impactWindowDays,
-		labelsFile: ctx.layout.labels,
-		sessionEvalsFile: ctx.layout.sessionEvals,
-		coverage: withCoverage ? coverageNow(env) : undefined,
-	});
+	return indexedModel(filter, env, withCoverage)?.report;
 }
 
 /** Builds the report; returns the HTML path, or undefined when nothing was extracted yet. */
-export function runReport(options: { env?: Env; filter?: Filter; outDir?: string; lang?: Lang } = {}): { html: string; json: string } | undefined {
+export function runReport(options: { env?: Env; filter?: RangeInput; outDir?: string; lang?: Lang } = {}): { html: string; json: string } | undefined {
 	const ctx = context(options.env);
-	const m = model(options.filter ?? {}, options.env);
-	if (!m) return undefined;
+	const data = snapshot(options.env), filter = options.filter ?? {};
+	if (!data) return;
 	const dir = resolve(options.outDir ?? ctx.layout.reports);
 	mkdirSync(dir, { recursive: true });
-	const html = join(dir, "report.html");
-	const json = join(dir, "model.json");
-	writeFileSync(json, JSON.stringify(m, null, 1));
-	writeFileSync(html, renderHtml(m, options.lang ?? "zh"));
-	return { html, json };
+	const write = (m: ReportModel, range: Preset | "custom") => {
+		const html = join(dir, `report${suffix(range)}.html`), json = join(dir, `model${suffix(range)}.json`);
+		writeFileSync(json, JSON.stringify(m, null, 1));
+		writeFileSync(html, renderHtml(m, options.lang ?? "zh", range));
+		return { html, json };
+	};
+	if (filter.since || filter.until || filter.days !== undefined) return write(data.build(filter, 30), "custom");
+	const all = data.build(filter, "all");
+	for (const p of PRESETS) if (p !== 30) write(p === "all" ? all : data.build(filter, p, all.changes), p);
+	return write(data.build(filter, 30, all.changes), 30);
 }
 
 export function reportPath(env?: Env): string {

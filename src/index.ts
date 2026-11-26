@@ -22,12 +22,13 @@ export function cliPath(): { cmd: string; args: string[] } | undefined {
 	return found ? { cmd: process.execPath, args: [found] } : undefined;
 }
 
-const SUBCOMMANDS = ["status", "extract", "report", "mark"];
+const SUBCOMMANDS = ["status", "findings", "extract", "report", "mark"];
 
-function parseFlags(args: string[]): { since?: string; project?: string; rest: string[] } {
-	const out: { since?: string; project?: string; rest: string[] } = { rest: [] };
+function parseFlags(args: string[]) {
+	const out: { since?: string; days?: number; project?: string; rest: string[] } = { rest: [] };
 	for (let i = 0; i < args.length; i++) {
 		if (args[i] === "--since") out.since = args[++i];
+		else if (args[i] === "--days") out.days = Number(args[++i]);
 		else if (args[i] === "--project") out.project = args[++i];
 		else out.rest.push(args[i]);
 	}
@@ -94,7 +95,7 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		};
 
 		pi.registerCommand("evals", {
-			description: "Usage and process records: /evals [status|extract|report|mark <note>]",
+			description: "Usage and process records: /evals [status|findings|extract|report|mark <note>]",
 			getArgumentCompletions: (prefix: string) => {
 				const items = SUBCOMMANDS.filter((s) => s.startsWith(prefix)).map((s) => ({ value: s, label: s }));
 				return items.length ? items : null;
@@ -104,6 +105,9 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 				const sub = words[0] ?? "status";
 				if (sub === "status") {
 					ctx.ui.notify(statusText(env), "info");
+				} else if (sub === "findings") {
+					const flags = parseFlags(words.slice(1));
+					ctx.ui.notify(query("findings", { env, ...flags }), "info");
 				} else if (sub === "extract") {
 					if (running) {
 						ctx.ui.notify("pi-evals: an extract is already running.", "warning");
@@ -120,7 +124,7 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 					});
 				} else if (sub === "report") {
 					const flags = parseFlags(words.slice(1));
-					const out = runReport({ env, filter: { since: flags.since, project: flags.project } });
+					const out = runReport({ env, filter: flags });
 					ctx.ui.notify(out ? `pi-evals report: ${out.html}\nmodel: ${out.json}` : "pi-evals: nothing extracted yet; run /evals extract first.", out ? "info" : "warning");
 				} else if (sub === "mark") {
 					const text = words.slice(1).join(" ").trim();
@@ -139,11 +143,11 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		pi.registerTool({
 			name: "evals_query",
 			label: "Evals Query",
-			description: "Summaries of how skills, packages, ask-user, monitors and subagents were used, process-rule adherence, cost, the user's architecture changes with before/after numbers, and index coverage. Numbers and names only.",
-			promptSnippet: "Read pi usage and process summaries (skills, packages, process, cost, changes)",
+			description: "Start with findings for agent activity and changes; use one detail view for counts, cost or coverage.",
+			promptSnippet: "Analyze agent activity: query findings first, then one detail view",
 			parameters: Type.Object({
 				view: Type.Unsafe<View>({ type: "string", enum: [...VIEWS], description: "Which summary" }),
-				since: Type.Optional(Type.String({ description: "YYYY-MM-DD; default all data" })),
+				since: Type.Optional(Type.String({ description: "YYYY-MM-DD; default last 30 UTC dates through extraction" })),
 				project: Type.Optional(Type.String({ description: "Project key, e.g. a repo name" })),
 			}),
 			async execute(_id, params) {

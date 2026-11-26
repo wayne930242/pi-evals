@@ -1,7 +1,9 @@
 import type { ReportModel } from "../model.ts";
 import { concepts, lesson } from "./concepts.ts";
-import { finding, type Reading, readings, select, value, verdict } from "./findings.ts";
+import { overview, type Reading, readings, value, verdict } from "./findings.ts";
 import { type Change, esc, type Lang, num, stamp, title, type Words, words } from "./format.ts";
+import type { Preset } from "../ranges.ts";
+import { changeStrip } from "./strip.ts";
 import type { Week } from "./week.ts";
 
 function card(c: Change, id: string, rs: Reading[], L: Words) {
@@ -91,8 +93,8 @@ ${
 		L("Timeline", "回時間軸")
 	}</a></section>`;
 }
-export function timeline(m: ReportModel, w: Week, lang: Lang) {
-	const L = words(lang), { all, lead, highlighted, folded } = select(m);
+export function timeline(m: ReportModel, w: Week, lang: Lang, range: Preset | "custom") {
+	const L = words(lang), { all, lead, highlighted, folded, headline, trust } = overview(m, lang);
 	const ids = new Map(all.map((c, i) => [c, `change-${i + 1}`]));
 	const metrics = new Map(all.map((c) => [c, readings(c, m, lang)]));
 	const byDay = new Map<string, Change[]>(), byCommit = new Map<string, Change[]>();
@@ -108,29 +110,11 @@ export function timeline(m: ReportModel, w: Week, lang: Lang) {
 			byCommit.get(key)!.push(c);
 		}
 	}
-	const headline = lead
-		? finding(lead, metrics.get(lead)!, L)
-		: all.length
-		? L("Not enough sessions to compare changes yet", "這批調整的工作段數還不夠比較")
-		: L("No changes recorded in this period", "這段期間沒有調整紀錄");
-	const reason = lead?.impact;
-	const trust = lead && reason?.incomplete && reason.confounded && !reason.smallSample
-		? L(
-			`There were ${
-				num(reason.confounded)
-			} other changes, and one side has less than ${reason.window.days} days of data. We cannot credit this change alone.`,
-			`同期還有 ${num(reason.confounded)} 筆別的調整，一側的資料也未滿 ${reason.window.days} 天；目前不能把差異歸給這次調整。`,
-		)
-		: lead
-		? verdict(lead, metrics.get(lead)!, L)
-		: L(
-			`There are ${num(m.totals.sessions)} sessions in this report, but no eligible comparison.`,
-			`報表收錄 ${num(m.totals.sessions)} 段工作，目前沒有適合放在首頁的比較。`,
-		);
 	return {
 		lead,
 		headline,
 		trust,
+		strip: changeStrip(m, all, highlighted, ids, lang, range),
 		count: highlighted.length,
 		cards: highlighted.map((c) => card(c, ids.get(c)!, metrics.get(c)!, L)).join(""),
 		archive: [...byDay].map(([day, list]) =>

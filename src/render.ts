@@ -5,11 +5,12 @@ import { esc, type Lang, num, words } from "./report/format.ts";
 import { sections } from "./report/sections.ts";
 import { css } from "./report/style.ts";
 import { timeline } from "./report/timeline.ts";
-import { week, workload } from "./report/week.ts";
+import { PRESETS, type Preset, suffix } from "./ranges.ts";
+import { periodRows, workload } from "./report/week.ts";
 export type { Lang } from "./report/format.ts";
 
-export function renderHtml(m: ReportModel, lang: Lang = "zh"): string {
-	const L = words(lang), w = week(m), t = timeline(m, w, lang), c = concepts(m, w, t.lead, L);
+export function renderHtml(m: ReportModel, lang: Lang = "zh", range: Preset | "custom" = "custom"): string {
+	const L = words(lang), w = periodRows(m), t = timeline(m, w, lang, range), c = concepts(m, w, t.lead, L);
 	const nav = [
 		["archive", L("All changes", "所有調整")],
 		["skills", L("Skills", "技能")],
@@ -31,7 +32,7 @@ export function renderHtml(m: ReportModel, lang: Lang = "zh"): string {
 	}</title><style>${css}</style></head><body><header><a href="#timeline" class="brand"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect width="30" height="30" rx="8" fill="#174e47"/><path d="M7 22V15M15 22V8M23 22V12" fill="none" stroke="white" stroke-width="3"/></svg>pi-evals<span>${
 		L("Agent work, observed", "代理工作觀察")
 	}</span></a><small>${esc(date)} ${L("report", "更新")}　／　${L("All times UTC", "時間皆為 UTC")}</small></header>
-<main id="timeline"><div class="hero"><p class="eyebrow">${L("Change journal　／　Newest first", "調整紀事　／　依更新時間排列")}</p><h1>${
+<main id="timeline"><div class="ranges">${range === "custom" ? "" : `<nav aria-label="${L("Time range", "時間範圍")}">${PRESETS.map(p => `<a href="report${suffix(p)}.html"${p === range ? ' aria-current="page"' : ""}>${p === "all" ? L("All time", "全部") : L(`Last ${p} days`, `近 ${p} 天`)}</a>`).join("")}</nav>`}<small>${esc(m.window.since ?? "—")} – ${esc(m.window.until ?? "—")} UTC</small></div>${t.strip}<div class="hero"><p class="eyebrow">${L("Change journal　／　Newest first", "調整紀事　／　依更新時間排列")}</p><h1>${
 		esc(t.headline)
 	}</h1><p class="deck">${esc(t.trust)}</p>${
 		m.freshness.stale

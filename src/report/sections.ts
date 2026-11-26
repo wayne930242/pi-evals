@@ -89,9 +89,7 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 		meta.subagent_launches.meaning[lang],
 		T([L("Role", "角色"), L("Model", "模型"), L("Launches", "啟動次數")], s.launches.slice(0, 40).map((r) => [r.role, r.model, r.n])) +
 			more(label("subagent_cost"), T([L("Role", "角色"), L("USD", "美元")], s.costByRole.map((r) => [r.role, usd(r.cost)]))) +
-			`<p>${L("Linked to a parent across the index", "整份索引中能對回母工作階段的子代理")}：${num(s.linked)} / ${
-				num(s.subagentTotal)
-			}</p>`,
+			`<p>${L("Linked to a parent in this period", "這段期間能對回母工作階段的子代理")}：${s.linked === null ? L("Run /evals extract for this breakdown.", "請執行 /evals extract 更新分期統計。") : `${num(s.linked)} / ${num(s.subagentTotal)}`} </p>`,
 	);
 	const process = section(
 		"process",
@@ -145,7 +143,7 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 			"所有舊檔的大小和修改時間都要和索引相符，未建索引的檔案數和位元組數都歸零，才考慮開啟清理。報表不會刪檔。",
 		),
 		cov
-			? `<p>${L("Inactive days", "閒置天數")} &gt; ${cov.cutDays}　／　${L("Files indexed", "已建索引")} ${num(cov.indexed.files)} / ${
+			? `<p>${L("Files modified in the selected dates, indexed (all projects)", "選定日期內有修改的檔案，已建索引（全部專案）")}：${num(cov.inRange?.indexed ?? 0)} / ${num(cov.inRange?.files ?? 0)}</p><p>${L("Cleanup gate across all dates", "清理門檻不分日期")} · ${L("Inactive days", "閒置天數")} &gt; ${cov.cutDays}　／　${L("Files indexed", "已建索引")} ${num(cov.indexed.files)} / ${
 				num(cov.old.files)
 			}</p><p>${L("Not indexed", "未建索引")}：${num(cov.notIndexed.files)} ${L("files", "個檔案")} · ${
 				num(cov.notIndexed.bytes)
@@ -156,7 +154,7 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 		"labels",
 		L("Your labels", "你的標記"),
 		meta.agreement.meaning[lang],
-		m.labels.present && m.labels.n
+		m.labels.needsIndex ? `<p>${L("Run /evals extract to count labels in this period.", "請執行 /evals extract 以計算這段期間的標記。")}</p>` : m.labels.present && m.labels.n
 			? T(
 				[L("Check", "檢查"), L("Labelled", "已標記"), L("Agreement", "一致比例")],
 				m.labels.agreement.map((r) => [m.meta.detectors[r.detector]?.label[lang] ?? r.detector, r.n, pct(r.rate)]),

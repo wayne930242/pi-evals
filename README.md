@@ -40,7 +40,8 @@ The observer loads in every session, subagents included.
 | --- | --- |
 | `/evals` or `/evals status` | Record counts, the last extract, index coverage of old sessions, and the report path. |
 | `/evals extract [--workers N]` | Back-fills changed sessions in a background process, with two workers by default to leave memory for pi. Progress shows in the footer. |
-| `/evals report [--since YYYY-MM-DD] [--project <key>]` | Builds the report and prints its path. |
+| `/evals findings [--since YYYY-MM-DD] [--project <key>]` | Shows the report’s headline, what limits it, and where to look next. |
+| `/evals report [--since YYYY-MM-DD \| --days N] [--project <key>]` | Builds the linked date ranges, or one custom report when a start date or day count is given. |
 | `/evals mark <note>` | Adds a note to the change timeline, e.g. `/evals mark workers moved to gpt-6.2-astra`. |
 
 The same operations run from a shell, where extraction defaults to one fewer worker than available CPUs (at least one, at most eight).
@@ -48,7 +49,7 @@ On either surface, `--workers 0` reads the files sequentially without worker thr
 
 ```sh
 pi-evals extract [--root <dir>]... [--workers <n>] [--json]
-pi-evals report [--out <dir>] [--since YYYY-MM-DD] [--project <key>] [--lang zh|en]
+pi-evals report [--out <dir>] [--since YYYY-MM-DD | --days N] [--project <key>] [--lang zh|en]
 pi-evals status
 pi-evals query <view> [--since YYYY-MM-DD] [--project <key>]
 pi-evals mark <note>
@@ -56,23 +57,32 @@ pi-evals mark <note>
 
 ### The `evals_query` tool
 
-An agent calls `evals_query` with a `view` (`skills`, `packages`, `ask_user`, `monitors`, `subagents`, `process`, `cost`, `changes`, `coverage`) and optional `since` and `project`.
-The result is a plain-text summary under 2 KB with the report path; it says when the data is more than a day old.
+Start with `findings` (under 1,500 bytes), then follow one pointer if you need the counts.
+An agent calls `evals_query` with a `view` (`findings`, `skills`, `packages`, `ask_user`, `monitors`, `subagents`, `process`, `cost`, `changes`, `coverage`) and optional `since` and `project`.
+The result is plain text under 2 KB, covering the latest 30 UTC dates through the last extract unless you give `since`.
+`findings` flags the biggest package error-rate rise and a rise in jobs ending in error when the later of two complete weeks is at least five percentage points higher, with at least 20 calls or endings in **each** week.
+It also counts offered skills with no loads in the selected period and checks whether all old files are indexed.
+The [analysis skill](skills/analyzing-evals/SKILL.md) includes three read-only commands for a change’s full comparison, a skill’s daily session counts, and a package’s daily errors.
 The tool never starts an extract.
 
 ## The report
 
-One HTML file with no scripts, no network requests and no external assets; charts are inline SVG, and it follows the system's light or dark setting.
-It is written as `report.html` next to `model.json`, the ReportModel it is rendered from.
+Open `report.html` for the last 30 UTC dates, including the day of the last extract.
+The links at the top switch to 14 days, 90 days or all time; each opens another offline page in the same directory, with no scripts or external assets.
+Each page has a matching `model*.json` with the numbers it shows.
+`--since` or `--days` writes `report-custom.html` and `model-custom.json` without replacing the preset pages.
 Every number in the model carries a plain-language label, what it means, which direction is better, and how it is computed, in English and Traditional Chinese.
 ### Reading the report
 
+The strip below the date switch counts the changes by kind; its labeled marks open the highlighted comparisons.
 Start with the sentence above the timeline: it says what changed in the numbers; the next line tells you what limits the comparison.
 Open a card to see which sessions started before and after the change.
 Read the count beside each rate: a check that applies to 48 sessions can say nothing about the other 116 sessions in a group of 164.
 If the window is short, or other changes landed in the same period, do not credit a difference to the new version alone.
 
-The sidebar shows workload for the last seven complete UTC dates, with markers on days you changed the setup.
+The sidebar shows workload for the selected dates, with markers on days you changed the setup.
+A change appears on the timeline by its own date; its before-and-after comparison can reach beyond the selected dates.
+The cleanup check always considers **all** old files, so selecting two weeks cannot hide an unindexed file from last year.
 The date disclosures keep the rest of the timeline available without putting hundreds of cards on the first screen.
 Use the section links for usage, process checks, cost and cleanup coverage, or read the [five concepts with a worked example](docs/learn.zh-TW.md).
 

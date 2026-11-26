@@ -21,6 +21,8 @@ header {min-height:75px;flex-wrap:wrap}
 .brand span {font-size:17px;font-weight:400;padding-left:20px;margin-left:16px;border-left:1px solid var(--line);color:var(--sub)}
 small,.muted,.intro,.deck,.ends {color:var(--sub)}
 small,.muted,.ends,summary,.footline,.button {font-size:15px}
+.ranges,.ranges nav {display:flex;align-items:center;gap:6px;flex-wrap:wrap}.ranges {justify-content:space-between;margin-top:18px}
+.ranges a {padding:5px 12px;text-decoration:none;border-radius:6px}.ranges a[aria-current] {background:var(--tint);font-weight:700}
 .hero {padding:36px 0 20px}
 .hero h1,.hero-title {font-size:clamp(29px,3.125vw,40px);line-height:1.25;margin:18px 0}
 .deck,.intro {font-size:19px;margin:0}.hero .deck+.deck {margin-top:24px}
@@ -42,7 +44,13 @@ h3,.big {font-size:29px;line-height:1.35;margin:14px 0 18px}
 .workload h2 {margin-bottom:0}.workload h3 {margin:25px 0 12px}.workload .muted {margin:5px 0}
 .workload svg {width:100%;height:auto;display:block;margin-top:8px}
 .area {fill:var(--area)}.trend {stroke:var(--green);stroke-width:2.5;stroke-linejoin:round;fill:none}
-.marker {stroke:var(--warm);stroke-dasharray:3 4}.dot {fill:var(--green)}.ends {margin:4px 0}
+.ends {margin:4px 0}
+.change-strip {margin:18px 0 0;padding:12px 0;border-block:1px solid var(--line)}.change-strip h2 {font-size:19px;margin:0 0 6px}
+.kind-key {display:flex;flex-wrap:wrap;gap:4px 16px;font-size:14px;color:var(--sub)}.key {display:inline-block;width:.7em;height:.7em;border-radius:100%;background:var(--kind);margin-right:5px}
+.kind-pin {--kind:#3b9090}.kind-model-routing {--kind:#736cc9}.kind-rule {--kind:#c78231}.kind-agent-role {--kind:#c16c89}.kind-skill {--kind:#718c40}.kind-manual {--kind:#477dac}
+.change-mark,.work-mark {fill:var(--kind)}.change-strip svg {width:100%;display:block}.change-strip .axis,.change-strip .guide {stroke:var(--line);fill:none}
+.change-strip .slot-count {fill:var(--sub);font:12px sans-serif}.change-strip a text {fill:var(--green);font-size:14px;text-decoration:underline}
+@media(max-width:640px){.change-strip {overflow-x:auto}.change-strip svg {min-width:600px}}
 .footline {border-top:1px solid var(--line);padding-top:13px;margin:12px 0 0}
 .lesson,.tint,.after {background:var(--tint)}.lesson {padding:16px 19px}.lesson p {margin:5px 0 0}.side>.lesson {margin-top:16px}
 .topic {padding:38px 0}.topic h2 {margin:9px 0}.intro {margin:0 0 18px}

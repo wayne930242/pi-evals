@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Open the report on the last 30 days and switch to 14 days, 90 days or all time without scripts. For other dates use `--since` or `--days`.
+- Ask `/evals findings` or use the `findings` tool view for the headline, its limits, and which numbers to read next. Tool views now default to 30 days.
+- The `analyzing-evals` skill includes three small queries for the details of a change, daily sessions using one skill, and a package’s daily errors.
+
 ## 0.2.0
 
 - The report opens on two architecture changes, with a workload chart and a comparison you can open for every entry in the timeline. Each comparison shows what was counted and what limits the conclusion.

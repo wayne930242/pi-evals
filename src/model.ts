@@ -10,7 +10,7 @@ import type { Coverage } from "./coverage.ts";
 import { DETECTORS, ERA_START } from "./detectors.ts";
 import { CHANGE_KIND_META, DETECTOR_META, METRICS, NOTICE_META } from "./meta.ts";
 import { staticOwner } from "./owners.ts";
-import { dayOf } from "./paths.ts";
+import { traceId } from "./schema.ts";
 
 export const SMALL_SAMPLE = 20;
 /** Data older than this (hours) is reported as stale. */
@@ -174,7 +174,7 @@ interface LabelRow {
 	label: string;
 }
 
-function labelsJoin(labelsFile: string, evalsFile: string) {
+function labelsJoin(labelsFile: string, evalsFile: string, sessionIds?: Set<string>) {
 	if (!existsSync(labelsFile)) return { present: false, n: 0, agreement: [] as { detector: string; n: number; agree: number; rate: Rate }[] };
 	const codeLabels = existsSync(evalsFile) ? (JSON.parse(readFileSync(evalsFile, "utf8")) as Record<string, Record<string, string>>) : {};
 	const rows: LabelRow[] = readFileSync(labelsFile, "utf8")
@@ -188,7 +188,10 @@ function labelsJoin(labelsFile: string, evalsFile: string) {
 			}
 		});
 	const by = new Map<string, { n: number; agree: number }>();
+	let n = 0;
 	for (const row of rows) {
+		if (sessionIds && !sessionIds.has(traceId(row.session_id, "labels"))) continue;
+		n++;
 		const code = codeLabels[row.session_id]?.[row.evaluation_name];
 		if (!code || code === "na") continue;
 		const t = by.get(row.evaluation_name) ?? { n: 0, agree: 0 };
@@ -196,13 +199,15 @@ function labelsJoin(labelsFile: string, evalsFile: string) {
 		if (code === row.label) t.agree += 1;
 		by.set(row.evaluation_name, t);
 	}
-	return { present: true, n: rows.length, agreement: [...by].map(([detector, t]) => ({ detector, n: t.n, agree: t.agree, rate: rate(t.agree, t.n) })) };
+	return { present: true, n, agreement: [...by].map(([detector, t]) => ({ detector, n: t.n, agree: t.agree, rate: rate(t.agree, t.n) })) };
 }
 
 export function buildModel(options: {
 	index: DaysIndex;
 	rows: SessionRow[];
 	changes: Change[];
+	/** Already computed for the same index, project and comparison settings. */
+	comparisons?: (Change & { impact: ReturnType<typeof impactFromRows> | null })[];
 	filter: Filter;
 	windowDays: number;
 	labelsFile: string;
@@ -233,6 +238,11 @@ export function buildModel(options: {
 	const byProject = [...projectSkills.values()].sort((a, b) => b.loads - a.loads);
 	const projectRows = filter.project ? options.rows.filter((r) => r.p === filter.project) : options.rows;
 	const owner = (tool: string) => ownerFor(index, tool);
+	const inRange = (at: string) => (!filter.since || at.slice(0, 10) >= filter.since) && (!filter.until || at.slice(0, 10) <= filter.until);
+	const selected = projectRows.filter(r => inRange(r.s)), children = selected.filter(r => r.k);
+	const scoped = Boolean(filter.since || filter.until || filter.project);
+	const hasSessionIds = selected.every(r => r.id !== undefined);
+	const labelIds = scoped && existsSync(options.labelsFile) ? new Set(selected.flatMap(r => r.id ? [r.id] : [])) : undefined;
 	const calls = Object.values(total.tools).reduce((s, t) => s + t.calls, 0);
 	const errors = Object.values(total.tools).reduce((s, t) => s + t.errors, 0);
 	const tokens = total.usage.input + total.usage.output + total.usage.cacheRead + total.usage.cacheWrite;
@@ -246,11 +256,11 @@ export function buildModel(options: {
 		versions.set(name, list);
 	}
 	const sortedChanges = [...options.changes].sort((a, b) => a.at.localeCompare(b.at));
-	const firstDay = Object.keys(index.days).sort()[0] ?? "";
+	const earliest = [days[0], sortedChanges.find(c => inRange(c.at))?.at.slice(0, 10)].filter(Boolean).sort()[0];
 	return {
 		v: 1 as const,
 		generated: now.toISOString(),
-		window: { since: days[0] ?? filter.since ?? null, until: days.at(-1) ?? filter.until ?? null, days: days.length, project: filter.project ?? null },
+		window: { since: filter.since ?? earliest ?? null, until: filter.until ?? days.at(-1) ?? null, days: days.length, project: filter.project ?? null },
 		freshness: { lastExtract: lastExtract ?? null, built: index.built, stale: ageHours > STALE_HOURS, ageHours: Number.isFinite(ageHours) ? round(ageHours, 1) : null },
 		meta: { metrics: METRICS, detectors: DETECTOR_META, notices: NOTICE_META, changeKinds: CHANGE_KIND_META },
 		totals: {
@@ -308,8 +318,8 @@ export function buildModel(options: {
 			costByRole: Object.entries(total.subagentCost)
 				.map(([role, cost]) => ({ role, cost: round(cost, 2) }))
 				.sort((a, b) => b.cost - a.cost),
-			linked: index.sessions.linked,
-			subagentTotal: index.sessions.subagent,
+			linked: scoped ? (children.every(r => r.linked !== undefined) ? children.filter(r => r.linked).length : null) : index.sessions.linked,
+			subagentTotal: scoped ? children.length : index.sessions.subagent,
 		},
 		process: {
 			eraStart: ERA_START,
@@ -335,10 +345,10 @@ export function buildModel(options: {
 				.slice(0, 25)
 				.map(({ name, cost, sessions }) => ({ skill: name, cost, sessions })),
 		},
-		changes: sortedChanges
-			.filter((c) => (!filter.since || c.at.slice(0, 10) >= filter.since) && (!filter.until || c.at.slice(0, 10) <= filter.until))
+		changes: options.comparisons?.filter(c => inRange(c.at)) ?? sortedChanges
+			.filter((c) => inRange(c.at))
 			.map((c) => ({ ...c, impact: index.range.start && c.at > index.range.start ? impactFromRows(projectRows, c, sortedChanges, options.windowDays, index.range, owner) : null })),
-		labels: labelsJoin(options.labelsFile, options.sessionEvalsFile),
+		labels: { ...labelsJoin(options.labelsFile, options.sessionEvalsFile, labelIds), needsIndex: !!labelIds && !hasSessionIds },
 		coverage: options.coverage ?? null,
 	};
 }

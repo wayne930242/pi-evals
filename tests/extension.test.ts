@@ -154,10 +154,13 @@ test("/evals status, report, mark, and extract", async () => {
 	await runExtract({ env: h.env, workers: 0 });
 	await cmd.handler("report --since 2026-11-01", h.ctx);
 	const reportNote = h.notes.at(-1)?.text ?? "";
-	assert.match(reportNote, /report: .*report\.html/);
+	assert.match(reportNote, /report: .*report-custom\.html/);
 	const html = readFileSync(reportNote.match(/report: (\S+)/)?.[1] ?? "", "utf8");
 	assert.match(html, /<svg/);
 	assert.doesNotMatch(html, /<script|https?:\/\/|<link /, "no scripts and no network assets");
+	await cmd.handler("findings --days 14", h.ctx);
+	assert.match(h.notes.at(-1)?.text ?? "", /→ skills/);
+	await cmd.handler("report", h.ctx);
 	await cmd.handler("status", h.ctx);
 	assert.match(h.notes.at(-1)?.text ?? "", /report: .*report\.html/);
 	assert.match(h.notes.at(-1)?.text ?? "", /coverage \(inactive > 60 days\)/);

@@ -10,7 +10,7 @@ import { addLabel, bucketOf, bump, type DayAgg, emptyDay, mergeDay, rowOf, type 
 import { buildChanges, type Change, versionAt, writeChanges } from "./changes.ts";
 import type { Checkpoint } from "./extract/run.ts";
 import { dayOf, type Layout, type Settings } from "./paths.ts";
-import { type EvalRecord, NAMES } from "./schema.ts";
+import { type EvalRecord, NAMES, traceId } from "./schema.ts";
 import { liveFiles, readRecords } from "./store.ts";
 
 export interface DaysIndex {
@@ -200,7 +200,8 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 		}
 		if (Object.keys(labels).length) sessionEvals[s.sessionId] = labels;
 		add(s.project, days);
-		rows.push(rowOf(s.start, s.project, s.kind === "subagent", s.cost, days, s.evals));
+		rows.push({ ...rowOf(s.start, s.project, s.kind === "subagent", s.cost, days, s.evals), id: traceId(s.sessionId, "labels"),
+			linked: s.kind === "subagent" ? Boolean(s.parentId || (s.logicalId && links.has(s.logicalId))) : undefined });
 	}
 	let liveOnly = 0;
 	for (const [id, records] of bySession) {
@@ -208,7 +209,7 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 		liveOnly += 1;
 		const summary = liveSummary(records);
 		add(summary.project, summary.days);
-		rows.push(rowOf(summary.start, summary.project, records.some((r) => r.name === NAMES.session && r.attrs["pi.session.kind"] === "subagent"), 0, summary.days));
+		rows.push({ ...rowOf(summary.start, summary.project, records.some((r) => r.name === NAMES.session && r.attrs["pi.session.kind"] === "subagent"), 0, summary.days), id: traceId(id, "labels"), linked: false });
 	}
 
 	const owners: DaysIndex["owners"] = {};

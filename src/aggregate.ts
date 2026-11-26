@@ -164,6 +164,9 @@ export interface SessionSummary {
  * version split read, so a change at 16:00 splits a day's sessions at 16:00 rather than at midnight.
  */
 export interface SessionRow {
+	/** Used for the date/project-scoped labels join. Older indices lack these two fields. */
+	id?: string;
+	linked?: boolean;
 	/** Start, ISO. */
 	s: string;
 	p: string;
