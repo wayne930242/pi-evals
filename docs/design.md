@@ -1,0 +1,93 @@
+# Design
+
+pi-evals 0.1.0 is phase 1 of an evals effort for one person's pi setup: record how skills and packages are used and whether the work follows the anchorloop process, from past sessions and from now on, and show it in a report.
+This file records the decisions and the words they came from.
+The evidence came from four research notes written before the build (in the maintainer's agent-root repository, `scratch/evals/`): `instrumentation.md` (which pi seams carry which facts), `inventory.md` (anchorloop, pi-session-doctor and the session format on disk), `literature.md` (papers, OSS and the OTel conventions), and `research.md` (vendor guidance on agent and skill evals).
+
+## What the owner asked for
+
+The request, 2026-11-25: 「我想要強化一下 ai evals（上網看看最佳實踐），這可以把 session doctor 移除，或是把 session doctor 升級成 evals 工具，包括可以從資料產出視圖」 (strengthen AI evals following best practice; remove pi-session-doctor or upgrade it into an evals tool, with views produced from the data).
+
+Decisions on 2026-11-26, binding for this package:
+
+| Words | Decision |
+| --- | --- |
+| 「新套件 pi-evals，移除 session doctor」 | A new package. pi-session-doctor profiles event-loop stalls and never reads transcripts (inventory §5), so nothing of it carries over; its removal happens in the setup repository, not here. |
+| 「回頭抽取＋小觀察器」 | A read-only back-fill over the session files, plus a small live observer only for what those files lack. |
+| 「自己產出靜態網頁」 | Our own static HTML report, not a hosted or self-hosted trace server. |
+| 「可能會需要重新撰寫我們自己的 ask user … or monitor 如果他們沒有提供能記錄蹤跡的接口」 | No rewrite. The ask-user tool's results already hold the questions' count, cancel flag and wait time, and its `rpiv:ask-user:*` events show where an answer came from; pi-loop-monitor emits `monitor:started/finished/done/error` on `pi.events` with everything a record needs (instrumentation §2, §5). The observer listens; both packages stay untouched. |
+| 「用 pi command 操作，這樣 agent 也可以自己去看」 | `/evals` (status, extract, report, mark) is the main surface, and one tool, `evals_query`, lets an agent read bounded summaries. The CLI is a thin wrapper over the same functions. |
+| 「報表的設計會很重要，要注重人類可讀性，最好是可以記錄我做出的架構調整所造成的影響」 | A change timeline (pins, model routing, rules, skills, agent roles, live version changes, manual marks) with the same numbers before and after each change. The data (ReportModel, `model.json`) is separate from the renderer; this release ships a plain renderer, and the designed one will replace it after a mockup round. |
+| 「先索引，穩定後再開清理」 | No cleanup code. `/evals status` and `evals_query coverage` report how many session files older than the cut (default 60 days without changes) the index fully covers, by count and bytes: the gate before a retention tool may delete them. Extra session roots (a future trash dir) are a setting. |
+| 「記得我對 evals 是門外漢，你的報表和標記網頁要讓我有辦法看懂」 | Every metric and detector in the ReportModel carries a label, one sentence of meaning, the better direction, one sentence on how it is computed, and for detectors a pass and a fail example, in English and Traditional Chinese. No unexplained statistics terms in what the reader sees. |
+
+Later phases, not built here, each with a seam left open: human labels (phase 2; `labels.jsonl` is joined if present), with-and-without-skill A/B runs (phase 3), and session cleanup through a retention tool once the index covers old sessions (phase 4; `extraRoots` reads its trash dir).
+
+## Decisions
+
+### One record shape, OTel names
+
+OpenTelemetry's GenAI conventions already name the facts asked for: `execute_tool` spans with an agent-skills refinement (`gen_ai.skill.name`, `gen_ai.skill.resource.name`), `invoke_agent`, usage tokens, and the `gen_ai.evaluation.result` event (literature §2).
+pi-evals uses those names, `pi.*` for pi facts, `anchorloop.*` for process facts, and `eval.annotator_kind` / `eval.scope` from OpenInference's annotation model, since OTel has no evaluation scope yet.
+The session is an attribute (`session.id`), not a span, as pi-otel argues; a trace is one user prompt (literature §2, §4).
+Skill use is counted from tool calls and expansions, never from text mentions: cc-skill-usage measured a 212-fold overcount from grepping names (literature §2).
+A shell command counts as a skill load only when the whole command prints one `SKILL.md`; on the real corpus a looser rule counted 6,560 "loads" that were mostly searches and edits of skill files, against 21 under the strict rule.
+
+### Privacy by construction
+
+Sessions hold customer and ticket content and secrets (inventory, Gotchas; research §6).
+Records hold derived facts only, and the guard is in the record builder: every string attribute must look like a name or it becomes `redacted`.
+The summary keys (tool, skill, model and role names) pass the same check, because a model can choose a tool name or a path freely.
+The privacy test was written first and failed on exactly that: a secret placed in a read path and a tool name reached `days.json` and the report through the summary keys while the records stayed clean.
+
+### Back-fill
+
+The session files hold almost everything (instrumentation §5): tool calls with `durationMs` (from October on; older calls use the time between call and result), the ask-user results in both the current and the retired `pi-ask-user` shapes, the skill catalog pi offered (the system message's `skills` section), monitor endings delivered as `pi-loop-monitor` messages, and close-guard notices.
+Extraction streams each file line by line on a pool of worker threads and writes one record file per session file atomically.
+It is incremental by path, size and modification time, so a later extract reads only active sessions; an extractor version in the checkpoint forces a full re-read when extraction changes.
+A subagent session is linked to its parent three ways: the parent's `subagent` result (`details.id`, the child's logical id), `~/.pi/agent/dispatch-ledger/<parent>.json`, and the artifacts path in the child's brief.
+Live records and back-fill meet by session id: back-fill counts win, and live adds monitor lifecycles and answer sources.
+
+### Live observer
+
+It registers handlers and nothing heavy: one tool-owner snapshot per session from `pi.getAllTools()` sourceInfo, the nearest `package.json` for name and version (instrumentation §1: "do not infer ownership from names"), a record per `tool_execution_end` (which also fires for blocked, aborted and invalid calls), skill loads from reads, `/skill:` input and declared-skills messages, `monitor:*` events, and `rpiv:ask-user:answer` to tag remote answers.
+It appends to the state dir, never to the session file, and a failed write warns once per session and is otherwise ignored.
+
+### Process detectors
+
+Four session-scoped checks, each a `gen_ai.evaluation.result` with `annotator_kind` CODE.
+Anchor and change reading is ported from anchorloop's close guard (`pi/close-guard.ts` `read()`, 3.3.0), whose repository rules keep the guard small, so the evals live outside it (inventory §1).
+
+- `anchor_before_first_edit`: an `Anchor:` line or todo anchor appears before the first successful `write` or `edit`. An anchor stated only in a subagent's brief is still a fail, named `anchor_only_in_brief`, so the report can tell the two apart.
+- `check_after_last_edit`: every command of the anchor has a passing run after the last change.
+- `todo_evidence`: completed tasks in the final todo list carry evidence; the value is the share that do.
+- `close_guard_quiet`: an editing session got no close-guard reminder about a missing or failing check (an evidence hand-off reminder does not count).
+
+Only sessions from 2026-11-23 (anchorloop 3.0.0) on are judged; older ones are out of scope rather than failing (inventory, Gotchas).
+Like the guard, an edit made through bash is not seen as a change.
+These are process checks on observable events, which suits a process skill whose path is the product (research §1); they say how often the rules were followed, not whether the work was right.
+The anchorloop version per day comes from the pin history in the change timeline.
+
+### Change impact
+
+Each change gets the same handful of numbers over the days before and after it (7 each by default), with the session count on each side.
+A side with fewer than 20 sessions is flagged as too small to read, and other changes inside either window (not from the same commit) are counted as confounders.
+Both flags are shown, not hidden: these comparisons hint at an effect and prove none (research §1 on noise: single runs vary by several points).
+
+### Report
+
+The ReportModel holds every number with its n and window, and the plain-language metadata; the renderer reads only it.
+The HTML has no scripts, no network and no external assets, uses inline SVG, and follows the system's light or dark setting.
+It renders in Traditional Chinese by default (`--lang en` for English).
+
+### Storage choices
+
+JSON lines and JSON files, no database: the index is rebuilt from per-session summaries in about a second, and the reader needs no service (research §4: everything reduces to files plus one static page).
+Back-filled records take about 0.7 GB for the 23.8 GB corpus; the per-day aggregates the report and the tool read take about 1.5 MB.
+
+## Measured on the maintainer's corpus (2026-11-26)
+
+- 21,526 session files, 23.8 GB, read in 21 to 84 seconds with seven workers (285 to 1,130 MB/s over four runs, depending on the disk cache and machine load), peak memory 3.0 to 3.2 GB; with one worker, 129 seconds (185 MB/s) and 1.0 GB. `--workers` caps both. A later extract reads only the files that changed: 23 files in under 2 seconds.
+- 1.40 million records: 1.14 million tool calls, 80,000 detector results, 29,000 prompts, 11,000 skill loads, 7,300 monitor endings.
+- Cross-checks against the raw files: ask-user calls 5,101 by both counts; `SKILL.md` reads on 2026-11-24, 570 raw against 568 counted (the two missing reads failed); one session's 73 tool calls, 73 in its summary and 73 records.
+- Sixty random text samples from transcripts (messages, thinking, tool arguments) appear in no file under the state dir.

@@ -1,0 +1,58 @@
+{
+  "name": "pi-evals",
+  "version": "0.1.0",
+  "description": "Usage and process records for pi: how skills, packages, ask-user, monitors and subagents are used, back-filled from past sessions, with a static report and an evals_query tool",
+  "type": "module",
+  "license": "MIT",
+  "author": "wayne930242",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wayne930242/pi-evals.git"
+  },
+  "homepage": "https://github.com/wayne930242/pi-evals#readme",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "extension",
+    "evals",
+    "telemetry",
+    "skills",
+    "opentelemetry"
+  ],
+  "bin": {
+    "pi-evals": "./dist/cli.js"
+  },
+  "files": [
+    "src",
+    "dist",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "test": "npm run build && node --test --test-force-exit tests/*.test.ts",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.6.1",
+    "@types/node": "26.6.10",
+    "typebox": "1.4.7",
+    "typescript": "7.0.2"
+  }
+}
