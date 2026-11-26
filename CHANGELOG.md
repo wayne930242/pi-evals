@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- A later human label on the same session, rule and item replaces the earlier one in the report and agreement; `labels.jsonl` keeps both. New `source: "recheck"` for your second look at a label given after the fact (counted as 事後標). Each 「其他」 label stays its own event, and agent corrections are never replaced.
+
 ## 0.5.1
 
 - The two anchor checks read the forms agents actually use, checked against 30 sessions you labelled by hand. An anchor counts when the agent or its brief names the check before the first edit: an `Anchor:` line, a `Gates:`, `Checks:`, `Verify:`, `Done when` or `驗證：` line, a todo anchor or sb check spec, or a check command named in the brief. It also counts when the first change is a test file (red first). A brief's anchor is no longer failed as `anchor_only_in_brief`.

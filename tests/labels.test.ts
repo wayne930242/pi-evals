@@ -233,6 +233,23 @@ test("agreement counts human labels only, given after the fact or in the moment,
 	assert.equal(m.labels.n, 6);
 });
 
+test("a later human label on the same session and rule replaces the earlier one; the file keeps both", () => {
+	const m = labelled([
+		human("s2", "anchor_before_first_edit", "pass"),
+		human("s2", "anchor_before_first_edit", "fail", { source: "recheck", at: "2026-11-26T06:00:00.000Z", note: "anchor stated after the first edit" }),
+		human("s1", "check_after_last_edit", "fail", { source: "live", item: "t_aaaaaaaaaa" }),
+		human("s1", "check_after_last_edit", "pass", { source: "live", item: "t_bbbbbbbbbb" }),
+		human("s1", "other", "fail", { source: "live" }),
+		human("s1", "other", "fail", { source: "live" }),
+	]);
+	const a = m.labels.agreement.find((r) => r.detector === "anchor_before_first_edit")!;
+	assert.deepEqual([a.n, a.agree], [1, 1], "the recheck (fail) replaces the batch pass, and now agrees with the code");
+	const c = m.labels.agreement.find((r) => r.detector === "check_after_last_edit")!;
+	assert.equal(c.n, 2, "labels on different items of one session are different verdicts");
+	assert.equal(m.labels.other, 2, "each 'other' label is its own event");
+	assert.equal(m.labels.bySource.batch, 1, "a recheck counts as given after the fact");
+});
+
 test("a live label of a session not extracted yet is placed in range by its own time and project", () => {
 	const rows = [human("live-only", "todo_evidence", "pass", { source: "live", project: "p" }), agent("live-only", "other", { at: "2026-11-20T00:00:00.000Z" })];
 	assert.equal(labelled(rows, { since: "2026-11-24", until: "2026-11-26" }).labels.n, 1);

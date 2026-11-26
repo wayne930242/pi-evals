@@ -66,6 +66,8 @@ There are three kinds of rows:
 - A row without `source` is a human verdict given after the fact (the report calls it 事後標, the code `batch`).
 - `source: "live"` is a human verdict given in the moment with `/evals label`. `/evals label undo` appends `{ …, "source": "live", "undo": "<at of the withdrawn row>" }`, which withdraws the session's latest live row still in effect.
 - `source: "live-prompt"` is a human verdict too: the user's words after `/evals label`, which the agent turned into rows with `evals_label` and `on_behalf: "user"` during the turn those words started. The note is the user's words, taken from the command, never from the agent.
+- `source: "recheck"` is a human verdict given again after the fact; it replaces the earlier label.
+- A later human row on the same `session_id`, `evaluation_name` and `item` replaces an earlier one (the file keeps both); each `other` row and every agent row stays its own.
 - `source: "correction"` is an agent's `evals_label` call: `label` is always `fail`, and `type` is one of `no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction`, `other`. The tool accepts no other field or value, and refuses `on_behalf` outside such a turn.
 
 `evaluation_name` is a process check name or `other`.

@@ -16,8 +16,11 @@ export const VERDICTS = ["pass", "fail", "unclear"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 export const FAILURE_TYPES = ["no_check_stated", "no_check_run", "skipped_rule", "wrong_order", "unverified_claim", "ignored_instruction", "other"] as const;
 export type FailureType = (typeof FAILURE_TYPES)[number];
-/** `live-prompt`: the user's words after `/evals label`, which the agent turned into rows on the user's behalf. */
-export type LabelSource = "batch" | "live" | "live-prompt" | "correction";
+/**
+ * `live-prompt`: the user's words after `/evals label`, which the agent turned into rows on the user's behalf.
+ * `recheck`: the user's later verdict on a label given after the fact; it replaces that label.
+ */
+export type LabelSource = "batch" | "live" | "live-prompt" | "correction" | "recheck";
 export const NOTE_MAX = 500;
 
 const t = (en: string, zh: string): Text => ({ en, zh });
@@ -71,8 +74,21 @@ function parse(file: string): LabelRow[] {
 		});
 }
 
-/** Rows in effect, in file order. A withdrawal cancels its session's latest live row still in effect before it. */
+/**
+ * Rows in effect, in file order. A withdrawal cancels its session's latest live row still in effect before it, and a
+ * later human verdict on the same session, rule and item replaces an earlier one (the file keeps both). Each "other"
+ * label is its own event, and agent rows are never replaced.
+ */
 export function readLabels(file: string): LabelRow[] {
+	const rows = withdrawn(file);
+	const latest = new Map<string, number>();
+	rows.forEach((r, i) => {
+		if (r.annotator !== "agent" && r.evaluation_name !== "other") latest.set(`${r.session_id}\u0000${r.evaluation_name}\u0000${r.item ?? ""}`, i);
+	});
+	return rows.filter((r, i) => r.annotator === "agent" || r.evaluation_name === "other" || latest.get(`${r.session_id}\u0000${r.evaluation_name}\u0000${r.item ?? ""}`) === i);
+}
+
+function withdrawn(file: string): LabelRow[] {
 	const rows = parse(file);
 	const gone = new Set<number>();
 	const live = new Map<string, number[]>();
