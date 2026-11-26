@@ -8,7 +8,8 @@ const USAGE = `usage:
   pi-evals report [--out <dir>] [--since YYYY-MM-DD | --days N] [--project <key>] [--lang zh|en]
   pi-evals status
   pi-evals query <${VIEWS.join("|")}> [--since YYYY-MM-DD] [--project <key>]
-  pi-evals mark <note>`;
+  pi-evals mark <note>
+  pi-evals exp check|run|grade|show …   (pi-evals exp help)`;
 
 function flag(args: string[], name: string): string | undefined {
 	const i = args.indexOf(name);
@@ -21,6 +22,8 @@ function flags(args: string[], name: string): string[] {
 
 async function main(argv: string[]): Promise<number> {
 	const [cmd, ...args] = argv;
+	// Experiments load only when asked for, so the everyday commands stay light.
+	if (cmd === "exp") return (await import("./exp/cli.ts")).expMain(args);
 	const settingsError = context().settings.error;
 	if (settingsError) process.stderr.write(`pi-evals settings: ${settingsError}\n`);
 	if (cmd === "extract") {
