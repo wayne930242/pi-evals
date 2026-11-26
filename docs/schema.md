@@ -77,6 +77,8 @@ The report joins human rows with `index/session-evals.json` (the code labels per
 `unclear` labels are left out of the agreement rate and counted on their own (「看不出來 N」); labels on `other`, or on a session the code has not judged, are counted apart.
 Agent rows never enter the agreement; they make the 「被糾正」 section.
 With a date or project filter, a row belongs to the range by its session's start when the session is indexed, and by its own `at` and `project` otherwise.
+A range without an end date the user gave ends at the last extract, but a row of a session not indexed yet is not cut there, so a label given after the last extract still shows.
+The report counts the `live-prompt` rows among 當下標 and says how many there are.
 
 ## Change timeline
 

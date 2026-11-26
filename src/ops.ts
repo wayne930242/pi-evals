@@ -78,7 +78,8 @@ function snapshot(env?: Env, withCoverage = true) {
 	const cov = withCoverage ? coverageReader(ctx, now) : undefined;
 	return { index, build(input: RangeInput, preset: Preset, comparisons?: ReportModel["changes"]) {
 		const filter = rangeFilter(input, index.lastExtract ?? now.toISOString(), preset);
-		return buildModel({ index, rows, changes, comparisons, filter, now, windowDays: ctx.settings.impactWindowDays,
+		// A range ends at the last extract unless the user ends it; a label given since then has no session in the index yet.
+		return buildModel({ index, rows, changes, comparisons, filter, now, windowDays: ctx.settings.impactWindowDays, openEnd: input.until === undefined,
 			labelsFile: ctx.layout.labels, sessionEvalsFile: ctx.layout.sessionEvals, coverage: cov?.(filter), work });
 	} };
 }

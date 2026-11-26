@@ -184,6 +184,8 @@ export function buildModel(options: {
 	coverage?: Coverage;
 	/** Joined work items (`index/items.json`), when built. */
 	work?: ItemsFile;
+	/** The user gave no end date: labels of sessions not indexed yet are not cut at `filter.until`. */
+	openEnd?: boolean;
 	now?: Date;
 }) {
 	const { index, filter } = options;
@@ -322,7 +324,7 @@ export function buildModel(options: {
 			.filter((c) => inRange(c.at))
 			.map((c) => ({ ...c, impact: index.range.start && c.at > index.range.start ? impactFromRows(projectRows, c, sortedChanges, options.windowDays, index.range, owner) : null })),
 		labels: {
-			...labelsModel(options.labelsFile, options.sessionEvalsFile, { ...filter, selected: labelIds, indexed: indexedIds }, (at) => versionAt(sortedChanges, ANCHORLOOP, at)),
+			...labelsModel(options.labelsFile, options.sessionEvalsFile, { ...filter, until: options.openEnd ? undefined : filter.until, selected: labelIds, indexed: indexedIds }, (at) => versionAt(sortedChanges, ANCHORLOOP, at)),
 			needsIndex: !!labelIds && !hasSessionIds,
 		},
 		coverage: options.coverage ?? null,

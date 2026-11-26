@@ -124,7 +124,7 @@ The agent's `evals_label` takes enumerated names and nothing else, and its tool 
 Its rows never enter the agreement: an agent's own account of being corrected is not a verdict on the code.
 They are counted as 「被糾正」 by rule, failure type, the skills loaded before the correction, and the anchorloop version at the time.
 The count covers corrections that were logged, not every mistake; with fewer than 20, the report says it is too few to show a trend.
-A label whose session is not extracted yet enters a date or project filter by its own time and project, so it shows up at once.
+A label whose session is not extracted yet enters a date or project filter by its own time and project, and is not cut at the last extract unless the user set an end date, so it shows up at once.
 
 ### Storage choices
 

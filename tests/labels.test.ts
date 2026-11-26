@@ -14,9 +14,10 @@ import { readLabels } from "../src/labels.ts";
 import { buildModel } from "../src/model.ts";
 import { renderHtml } from "../src/render.ts";
 import { setKnownProjects } from "../src/project.ts";
-import { VIEWS } from "../src/query.ts";
+import { query, VIEWS } from "../src/query.ts";
+import { model, runExtract } from "../src/ops.ts";
 import { traceId } from "../src/schema.ts";
-import { SECRET, todo } from "./fixtures.ts";
+import { richSession, SECRET, todo, writeAgentDir } from "./fixtures.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
@@ -321,10 +322,16 @@ test("/evals label <your words> has the agent format them into labels for you, o
 	await assert.rejects(exec({ rule: "other", label: "maybe", on_behalf: "user" }), /label must be/);
 	await assert.rejects(exec({ rule: "other", on_behalf: "user" }), /label must be/);
 	await assert.rejects(exec({ rule: "other", label: "pass", type: "wrong_order", on_behalf: "user" }), /type .*fail/);
+	// The user's own prompt message keeps the turn open; another message from the user closes it.
+	await h.fire("message_end", { message: { role: "user", content: [{ type: "text", text: prompt }] } });
+	await exec({ rule: "todo_evidence", label: "pass", on_behalf: "user" });
+	await h.fire("message_end", { message: { role: "user", content: [{ type: "text", text: "something else" }] } });
+	await assert.rejects(exec({ rule: "todo_evidence", label: "pass", on_behalf: "user" }), /on_behalf/);
 	await h.fire("agent_end", {});
 	assert.deepEqual(h.raw(), [
 		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "check_after_last_edit", label: "fail", at: "2026-11-26T06:00:00.000Z", annotator: "human", source: "live-prompt", type: "unverified_claim", project: "demo-repo", note: words },
 		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "anchor_before_first_edit", label: "unclear", at: "2026-11-26T06:00:00.000Z", annotator: "human", source: "live-prompt", project: "demo-repo", note: words },
+		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "todo_evidence", label: "pass", at: "2026-11-26T06:00:00.000Z", annotator: "human", source: "live-prompt", project: "demo-repo", note: words },
 	]);
 	// After the turn the same call cannot claim to be the user's, and an agent's own label is a fail only.
 	await assert.rejects(exec({ rule: "check_after_last_edit", label: "fail", on_behalf: "user" }), /on_behalf/);
@@ -332,7 +339,7 @@ test("/evals label <your words> has the agent format them into labels for you, o
 	await assert.rejects(exec({ rule: "other", on_behalf: "agent" }), /on_behalf/);
 	await exec({ rule: "check_after_last_edit", label: "fail" });
 	assert.equal(h.raw().at(-1).annotator, "agent");
-	assert.equal(h.raw().length, 3);
+	assert.equal(h.raw().length, 4);
 	// A message from another session's command does not open this one.
 	const other = setup("01a2bbbb-0000-7000-8000-000000000002", h.state);
 	await other.fire("session_start");
@@ -340,11 +347,31 @@ test("/evals label <your words> has the agent format them into labels for you, o
 	await assert.rejects(other.tool("evals_label").execute("id", { rule: "other", label: "fail", on_behalf: "user" } as never, undefined, undefined, other.ctx as never), /on_behalf/);
 	// The rows count as labels given in the moment, and undo withdraws them like any live label.
 	await h.run("label undo");
-	assert.deepEqual(readLabels(h.labelsFile).map((r) => r.evaluation_name), ["check_after_last_edit", "check_after_last_edit"]);
+	assert.deepEqual(readLabels(h.labelsFile).map((r) => r.evaluation_name), ["check_after_last_edit", "anchor_before_first_edit", "check_after_last_edit"]);
 });
 
 test("a label written for you by the agent counts as given in the moment", () => {
 	const m = labelled([human("s1", "anchor_before_first_edit", "pass", { source: "live-prompt", note: "x" })]);
 	assert.deepEqual(m.labels.bySource, { batch: 0, live: 1 });
+	assert.equal(m.labels.fromWords, 1, "shown apart: the agent picked rule and verdict from the user's words");
 	assert.equal(m.labels.agreement[0].bySource.live.agree, 1);
+	assert.match(renderHtml(m, "zh"), /其中 1 筆是代理人依你的話整理的/);
+	assert.match(labelsView(m).join("\n"), /1 formatted by the agent from your words/);
+});
+
+test("a label given on a day after the last extract shows in the default report range and query", async () => {
+	const home = mkdtempSync(join(tmpdir(), "pi-evals-after-"));
+	setKnownProjects(["demo-repo"]);
+	const agentDir = writeAgentDir([{ dir: "--demo--", file: "2026-11-24T10-00-00-000Z_01a20000-0000-7000-8000-000000000001.jsonl", spec: richSession(home) }]);
+	const env = { HOME: home, PI_CODING_AGENT_DIR: agentDir, PI_EVALS_STATE_DIR: join(home, "state"), XDG_CONFIG_HOME: join(home, "config") };
+	const status = await runExtract({ env, workers: 0 });
+	const later = new Date(Date.parse(status.lastExtract) + 86_400_000).toISOString();
+	const file = join(home, "state", "labels.jsonl");
+	writeFileSync(file, [human("not-indexed", "todo_evidence", "pass", { source: "live", at: later }), agent("not-indexed", "other", { at: later })].map((r) => JSON.stringify(r)).join("\n") + "\n");
+	const view = query("labels", { env });
+	assert.match(view, /in the moment 1 \(1 sessions/);
+	assert.match(view, /corrections the agent logged \(not all mistakes\): 1 in 1 sessions/);
+	assert.equal(model({}, env)?.labels.n, 1);
+	// A range the user ends on purpose still ends there.
+	assert.equal(model({ until: status.lastExtract.slice(0, 10) }, env)?.labels.n, 0);
 });
