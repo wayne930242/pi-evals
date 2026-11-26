@@ -1,4 +1,5 @@
-import type { ReportModel } from "../model.ts";
+import { FAILURE_TYPE_META, type FailureType, ruleLabel } from "../labels.ts";
+import { type ReportModel, SMALL_SAMPLE } from "../model.ts";
 import { type concepts, lesson, selfCheck } from "./concepts.ts";
 import { duration, esc, type Lang, num, pct, table, usd, words } from "./format.ts";
 import { workSection } from "./work.ts";
@@ -151,21 +152,50 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 			} bytes</p>`
 			: `<p>${L("Coverage not measured; keep cleanup off.", "沒有索引覆蓋資料，請勿開啟清理。")}</p>`,
 	);
+	const lb = m.labels, rule = (r: string) => ruleLabel(r, lang);
+	const pair = (c: { agree: number; n: number }) => (c.n ? `${num(c.agree)} / ${num(c.n)}` : "—");
 	const labels = section(
 		"labels",
 		L("Your labels", "你的標記"),
 		meta.agreement.meaning[lang],
-		m.labels.needsIndex ? `<p>${L("Run /evals extract to count labels in this period.", "請執行 /evals extract 以計算這段期間的標記。")}</p>` : m.labels.present && m.labels.n
-			? T(
-				[L("Check", "檢查"), L("Labelled", "已標記"), L("Agreement", "一致比例"), L("Cannot tell", "看不出來")],
-				m.labels.agreement.map((r) => [m.meta.detectors[r.detector]?.label[lang] ?? r.detector, r.n, pct(r.rate), r.unclear]),
-			) + `<p class="muted">${L(`Cannot tell ${num(m.labels.unclear)}: labels marked unclear are left out of the agreement rate.`, `看不出來 ${num(m.labels.unclear)}：標成「看不出來」的不算進一致比例。`)}</p>`
+		lb.needsIndex ? `<p>${L("Run /evals extract to count labels in this period.", "請執行 /evals extract 以計算這段期間的標記。")}</p>` : lb.present && lb.n
+			? `<p>${L(`After the fact ${num(lb.bySource.batch)} (${num(lb.sessions.batch)} sessions)　／　In the moment ${num(lb.bySource.live)} (${num(lb.sessions.live)} sessions)`, `事後標 ${num(lb.bySource.batch)} 筆（${num(lb.sessions.batch)} 段工作）　／　當下標 ${num(lb.bySource.live)} 筆（${num(lb.sessions.live)} 段工作）`)}</p>` +
+				T(
+					[L("Check", "檢查"), L("Agreement", "一致比例"), L("After the fact: agreed / compared", "事後標：一致 / 比對"), L("In the moment: agreed / compared", "當下標：一致 / 比對"), L("Cannot tell", "看不出來")],
+					lb.agreement.map((r) => [rule(r.detector), `${pct(r.rate)}（${num(r.n)}）`, pair(r.bySource.batch), pair(r.bySource.live), r.unclear]),
+				) +
+				`<p class="muted">${L(`Cannot tell ${num(lb.unclear)}: labels marked unclear are left out of the agreement rate.`, `看不出來 ${num(lb.unclear)}：標成「看不出來」的不算進一致比例。`)}${
+					lb.noCode ? L(` ${num(lb.noCode)} labels have no code verdict to compare: the session is not extracted yet (run /evals extract), or the rule did not apply to it.`, `另有 ${num(lb.noCode)} 筆沒有程式判斷可比：那段工作還沒整理（執行 /evals extract 後就能比），或這條規則不適用於它。`) : ""
+				}${lb.other ? L(` ${num(lb.other)} labels are on "Other", which no code check covers.`, `${num(lb.other)} 筆標在「其他」，沒有程式檢查可比。`) : ""}</p>` + lesson(cards.labelTiming, L)
 			: `<p>${
 				L(
-					"No labels yet. In phase 2 you will judge sessions yourself and compare your answers with the code checks.",
-					"還沒有標記。第二階段會讓你親自判讀工作紀錄，再對照程式與你的判斷是否一致。",
+					"No labels yet. Type /evals label in any session to say, while the work is in front of you, whether the agent followed a rule.",
+					"還沒有標記。在任何工作階段輸入 /evals label，就能趁工作還在眼前，標記代理人有沒有照規則做。",
 				)
-			}</p>`,
+			}</p>` + lesson(cards.labelTiming, L),
+	);
+	const c = lb.corrections, few = c.n < SMALL_SAMPLE;
+	const corrections = section(
+		"corrections",
+		L("Times the agent was corrected", "被糾正"),
+		L(
+			"When you correct how the agent worked, it logs one line with evals_label. This counts the corrections it logged, not all its mistakes: a slip nobody caught, or one it forgot to log, is not here.",
+			"你糾正代理人的做法時，它會用 evals_label 自己記一筆。這裡數的是它記下的被糾正次數，不是所有錯誤：沒人發現、沒被糾正，或它忘了記的，都不在這裡。",
+		),
+		c.n
+			? `<p class="big">${num(c.n)} <small>${L("corrections", "次")} · ${num(c.sessions)} ${L("sessions", "段工作")}</small></p>${
+				few ? `<p class="stale">${L(`Only ${num(c.n)}: too few to show a trend. Read it as a hint of where slips may recur.`, `只有 ${num(c.n)} 次，太少，看不出趨勢；只能當提醒，看哪裡可能常出錯。`)}</p>` : ""
+			}<div class="pair"><article class="panel"><h3>${L("By rule", "依規則")}</h3>${T([L("Rule", "規則"), L("Times", "次數")], c.byRule.map((r) => [rule(r.rule), r.n]))}</article><article class="panel"><h3>${L("By kind of slip", "依錯誤類型")}</h3>${
+				T([L("Kind", "類型"), L("Times", "次數")], c.byType.map((r) => [FAILURE_TYPE_META[r.type as FailureType]?.[lang] ?? r.type, r.n]))
+			}</article></div>` +
+				more(
+					L("By skill loaded and by anchorloop version", "依載入的技能、anchorloop 版本"),
+					`<p class="muted">${L("Skills the session had loaded before the correction. One correction counts for each of them; this does not mean the skill caused it.", "被糾正時這段工作已載入的技能。一次糾正會算進每個已載入的技能，不代表是技能造成的。")}</p>` +
+						T([L("Skill", "技能"), L("Times", "次數"), L("Sessions", "工作段數")], c.bySkill.map((r) => [r.skill || L("(none loaded)", "（沒載入技能）"), r.n, r.sessions])) +
+						`<p class="muted">${L("The anchorloop version in use when the correction was logged.", "依糾正當時使用的 anchorloop 版本。")}</p>` +
+						T([L("Version", "版本"), L("Times", "次數"), L("Sessions", "工作段數")], c.byVersion.map((r) => [r.version === "unknown" ? L("unknown", "不明") : r.version, r.n, r.sessions])),
+				)
+			: `<p>${L("None logged in this period. When you correct the agent, it logs one line here.", "這段期間沒有紀錄。你糾正代理人時，它會在這裡記一筆。")}</p>`,
 	);
 	return [
 		workSection(m, lang, cards, lesson),
@@ -178,6 +208,7 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 		cost,
 		coverage,
 		labels,
+		corrections,
 		section(
 			"concepts",
 			L("Concepts", "概念"),

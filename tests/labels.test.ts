@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { emptyDay, type SessionRow } from "../src/aggregate.ts";
+import type { DaysIndex } from "../src/build.ts";
+import type { Change } from "../src/changes.ts";
 import { createEvals } from "../src/index.ts";
 import { readLabels } from "../src/labels.ts";
+import { buildModel } from "../src/model.ts";
+import { renderHtml } from "../src/render.ts";
 import { setKnownProjects } from "../src/project.ts";
+import { traceId } from "../src/schema.ts";
 import { SECRET, todo } from "./fixtures.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
@@ -179,4 +185,90 @@ test("evals_label records an agent correction with names only and rejects free t
 	const text = tool.description + (tool.promptSnippet ?? "") + JSON.stringify(tool.parameters);
 	assert.ok(tool.description.length <= 200, `description ${tool.description.length}`);
 	assert.ok(Buffer.byteLength(text) < 650, `tool text ${Buffer.byteLength(text)} bytes`);
+});
+
+/** A one-day index whose sessions s1..s3 are indexed (hashed ids), plus code verdicts for them. */
+function labelled(rows: Record<string, unknown>[], filter: { since?: string; until?: string; project?: string } = {}) {
+	const dir = mkdtempSync(join(tmpdir(), "pi-evals-lm-"));
+	const labels = join(dir, "labels.jsonl");
+	const evals = join(dir, "session-evals.json");
+	writeFileSync(evals, JSON.stringify({ s1: { anchor_before_first_edit: "pass", check_after_last_edit: "fail" }, s2: { anchor_before_first_edit: "fail" }, s3: { anchor_before_first_edit: "pass" } }));
+	writeFileSync(labels, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+	const agg = emptyDay();
+	agg.sessions = 3;
+	const idx: DaysIndex = { v: 1, built: "2026-11-26T00:00:00.000Z", lastExtract: "2026-11-26T00:00:00.000Z", days: { "2026-11-24": { p: agg } }, owners: {}, offeredSkills: [], sessions: { backfill: 3, live: 0, both: 0, subagent: 0, linked: 0 }, range: { start: "2026-11-24T12:00:00.000Z", end: "2026-11-26T00:00:00.000Z" } };
+	const sessionRows: SessionRow[] = ["s1", "s2", "s3"].map((id) => ({ id: traceId(id, "labels"), s: "2026-11-24T12:00:00.000Z", p: "p", k: 0, c: 0, t: {}, ac: 0, ax: 0, sl: 0, nt: 0, ev: {} }));
+	const changes: Change[] = [{ at: "2026-11-25T00:00:00.000Z", kind: "pin", subject: "pin", package: "pi-anchorloop", from: "3.2.0", to: "3.3.0", source: "git", sha: "a" }];
+	return buildModel({ index: idx, rows: sessionRows, changes, filter, windowDays: 3, labelsFile: labels, sessionEvalsFile: evals, now: new Date("2026-11-26T06:00:00.000Z") });
+}
+
+const human = (s: string, rule: string, label: string, extra: Record<string, unknown> = {}) => ({ session_id: s, evaluation_name: rule, label, at: "2026-11-26T05:51:51.220Z", annotator: "human", ...extra });
+const agent = (s: string, rule: string, extra: Record<string, unknown> = {}) => ({ session_id: s, evaluation_name: rule, label: "fail", at: "2026-11-26T05:00:00.000Z", annotator: "agent", source: "correction", project: "p", ...extra });
+
+test("agreement counts human labels only, given after the fact or in the moment, and splits them by when", () => {
+	const m = labelled([
+		human("s1", "anchor_before_first_edit", "pass"),
+		human("s2", "anchor_before_first_edit", "pass"),
+		human("s3", "anchor_before_first_edit", "pass", { source: "live" }),
+		human("s1", "check_after_last_edit", "fail", { source: "live" }),
+		human("s1", "other", "fail", { source: "live", note: "自己的話" }),
+		human("live-only", "anchor_before_first_edit", "fail", { source: "live", project: "p" }),
+		agent("s1", "anchor_before_first_edit"),
+		agent("s2", "anchor_before_first_edit"),
+	]);
+	const a = m.labels.agreement.find((r) => r.detector === "anchor_before_first_edit")!;
+	assert.deepEqual([a.n, a.agree], [3, 2], "agent rows are not verdicts on the code");
+	assert.deepEqual([a.bySource.batch.n, a.bySource.batch.agree, a.bySource.live.n, a.bySource.live.agree], [2, 1, 1, 1]);
+	assert.deepEqual(m.labels.bySource, { batch: 2, live: 4 });
+	assert.deepEqual(m.labels.sessions, { batch: 2, live: 3 });
+	assert.equal(m.labels.other, 1);
+	assert.equal(m.labels.noCode, 1, "a live label on a session not extracted yet waits for its code verdict");
+	assert.equal(m.labels.n, 6);
+});
+
+test("a live label of a session not extracted yet is placed in range by its own time and project", () => {
+	const rows = [human("live-only", "todo_evidence", "pass", { source: "live", project: "p" }), agent("live-only", "other", { at: "2026-11-20T00:00:00.000Z" })];
+	assert.equal(labelled(rows, { since: "2026-11-24", until: "2026-11-26" }).labels.n, 1);
+	assert.equal(labelled(rows, { since: "2026-11-24", until: "2026-11-26" }).labels.corrections.n, 0, "a correction outside the dates stays out");
+	assert.equal(labelled(rows, { since: "2026-11-24", until: "2026-11-26", project: "q" }).labels.n, 0);
+	// An indexed session outside the range keeps its labels out, whatever their time.
+	assert.equal(labelled([human("s1", "todo_evidence", "pass", { source: "live" })], { since: "2026-11-25" }).labels.n, 0);
+});
+
+test("corrections count by rule, failure type, skill loaded and anchorloop version", () => {
+	const m = labelled([
+		agent("s1", "check_after_last_edit", { type: "no_check_run", skills: ["coding", "inspecting"] }),
+		agent("s1", "check_after_last_edit", { type: "no_check_run", skills: ["coding"], at: "2026-11-25T06:00:00.000Z" }),
+		agent("s2", "other", { type: "ignored_instruction" }),
+		human("s1", "check_after_last_edit", "fail", { source: "live" }),
+	]);
+	const c = m.labels.corrections;
+	assert.equal(c.n, 3);
+	assert.equal(c.sessions, 2);
+	assert.deepEqual(c.byRule, [{ rule: "check_after_last_edit", n: 2 }, { rule: "other", n: 1 }]);
+	assert.deepEqual(c.byType, [{ type: "no_check_run", n: 2 }, { type: "ignored_instruction", n: 1 }]);
+	assert.deepEqual(c.byRuleType[0], { rule: "check_after_last_edit", type: "no_check_run", n: 2 });
+	assert.deepEqual(c.bySkill, [{ skill: "coding", n: 2, sessions: 1 }, { skill: "", n: 1, sessions: 1 }, { skill: "inspecting", n: 1, sessions: 1 }]);
+	assert.deepEqual(c.byVersion, [{ version: "3.3.0", n: 3, sessions: 2 }]);
+});
+
+test("the report splits your labels by when they were given, explains it, and shows corrections with their limits", () => {
+	const m = labelled([
+		human("s1", "anchor_before_first_edit", "pass"),
+		human("s2", "anchor_before_first_edit", "pass"),
+		human("s3", "anchor_before_first_edit", "pass", { source: "live", note: "只有我看得到的話" }),
+		agent("s1", "check_after_last_edit", { type: "no_check_run", skills: ["coding"] }),
+	]);
+	const html = renderHtml(m, "zh");
+	assert.match(html, /事後標 2 筆（2 段工作）　／　當下標 1 筆（1 段工作）/);
+	assert.match(html, /當下標記 vs 事後標記/);
+	assert.match(html, /目前事後標了 2 段工作，程式和你一致的有：「動手前先說好怎麼驗證」1\/2。/);
+	assert.match(html, /id="corrections"/);
+	assert.match(html, /不是所有錯誤/);
+	assert.match(html, /只有 1 次，太少/);
+	assert.match(html, /沒跑檢查/);
+	assert.match(html, /coding/);
+	assert.match(html, /3\.3\.0/);
+	assert.ok(!html.includes("只有我看得到的話"), "a note stays in the labels file");
+	assert.match(renderHtml(m, "en"), /Times the agent was corrected/);
 });

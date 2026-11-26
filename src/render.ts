@@ -31,6 +31,7 @@ export function renderHtml(m: ReportModel, lang: Lang = "zh", range: Preset | "c
 		["cost", L("Cost", "費用")],
 		["coverage", L("Cleanup", "清理門檻")],
 		["labels", L("Labels", "你的標記")],
+		["corrections", L("Corrections", "被糾正")],
 		["concepts", L("Concepts", "概念")],
 	];
 	const date = m.generated.slice(0, 10);

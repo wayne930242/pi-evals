@@ -2,17 +2,17 @@
  * The ReportModel: every number the report can show, each with its n and window, plus the plain-language
  * metadata to explain it. The renderer reads only this; `evals_query` reads parts of it.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { ASK_BUCKETS, type DayAgg, emptyDay, mergeDay, type SessionRow } from "./aggregate.ts";
 import type { DaysIndex } from "./build.ts";
-import type { Change } from "./changes.ts";
+import { type Change, versionAt } from "./changes.ts";
 import type { Coverage } from "./coverage.ts";
 import { DETECTORS, ERA_START } from "./detectors.ts";
 import { CHANGE_KIND_META, CLOSE_KIND_META, DETECTOR_META, METRICS, NOTICE_META, STALL_KIND_META } from "./meta.ts";
 import { staticOwner } from "./owners.ts";
 import { weeklyRises } from "./trends.ts";
-import { traceId } from "./schema.ts";
-import type { ItemsFile } from "./work/join.ts";
+import { labelsModel } from "./labels.ts";
+import { ANCHORLOOP, type ItemsFile } from "./work/join.ts";
 import { workModel } from "./work/model.ts";
 
 export const SMALL_SAMPLE = 20;
@@ -171,48 +171,6 @@ export function impactFromRows(rows: SessionRow[], change: Change, all: Change[]
 	};
 }
 
-interface LabelRow {
-	session_id: string;
-	evaluation_name: string;
-	label: string;
-}
-
-function labelsJoin(labelsFile: string, evalsFile: string, sessionIds?: Set<string>) {
-	if (!existsSync(labelsFile)) return { present: false, n: 0, unclear: 0, agreement: [] as { detector: string; n: number; agree: number; rate: Rate; unclear: number }[] };
-	const codeLabels = existsSync(evalsFile) ? (JSON.parse(readFileSync(evalsFile, "utf8")) as Record<string, Record<string, string>>) : {};
-	const rows: LabelRow[] = readFileSync(labelsFile, "utf8")
-		.split("\n")
-		.filter(Boolean)
-		.flatMap((line) => {
-			try {
-				return [JSON.parse(line) as LabelRow];
-			} catch {
-				return [];
-			}
-		});
-	const by = new Map<string, { n: number; agree: number; unclear: number }>();
-	let n = 0;
-	let unclear = 0;
-	for (const row of rows) {
-		if (sessionIds && !sessionIds.has(traceId(row.session_id, "labels"))) continue;
-		n++;
-		const t = by.get(row.evaluation_name) ?? { n: 0, agree: 0, unclear: 0 };
-		// "Cannot tell" is the reader's honest answer, not a disagreement: count it apart from the agreement rate.
-		if (row.label === "unclear") {
-			unclear += 1;
-			t.unclear += 1;
-			by.set(row.evaluation_name, t);
-			continue;
-		}
-		const code = codeLabels[row.session_id]?.[row.evaluation_name];
-		if (!code || code === "na") continue;
-		t.n += 1;
-		if (code === row.label) t.agree += 1;
-		by.set(row.evaluation_name, t);
-	}
-	return { present: true, n, unclear, agreement: [...by].map(([detector, t]) => ({ detector, n: t.n, agree: t.agree, rate: rate(t.agree, t.n), unclear: t.unclear })) };
-}
-
 export function buildModel(options: {
 	index: DaysIndex;
 	rows: SessionRow[];
@@ -256,6 +214,7 @@ export function buildModel(options: {
 	const scoped = Boolean(filter.since || filter.until || filter.project);
 	const hasSessionIds = selected.every(r => r.id !== undefined);
 	const labelIds = scoped && existsSync(options.labelsFile) ? new Set(selected.flatMap(r => r.id ? [r.id] : [])) : undefined;
+	const indexedIds = labelIds && new Set(options.rows.flatMap(r => r.id ? [r.id] : []));
 	const calls = Object.values(total.tools).reduce((s, t) => s + t.calls, 0);
 	const errors = Object.values(total.tools).reduce((s, t) => s + t.errors, 0);
 	const tokens = total.usage.input + total.usage.output + total.usage.cacheRead + total.usage.cacheWrite;
@@ -362,7 +321,10 @@ export function buildModel(options: {
 		changes: options.comparisons?.filter(c => inRange(c.at)) ?? sortedChanges
 			.filter((c) => inRange(c.at))
 			.map((c) => ({ ...c, impact: index.range.start && c.at > index.range.start ? impactFromRows(projectRows, c, sortedChanges, options.windowDays, index.range, owner) : null })),
-		labels: { ...labelsJoin(options.labelsFile, options.sessionEvalsFile, labelIds), needsIndex: !!labelIds && !hasSessionIds },
+		labels: {
+			...labelsModel(options.labelsFile, options.sessionEvalsFile, { ...filter, selected: labelIds, indexed: indexedIds }, (at) => versionAt(sortedChanges, ANCHORLOOP, at)),
+			needsIndex: !!labelIds && !hasSessionIds,
+		},
 		coverage: options.coverage ?? null,
 		work: workModel(options.work, filter),
 	};

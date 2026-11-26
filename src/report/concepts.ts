@@ -30,6 +30,23 @@ function workCards(m: ReportModel, L: Words) {
 	};
 }
 
+/** When a label was given, with this report's numbers. */
+function labelTiming(m: ReportModel, L: Words) {
+	const l = m.labels, name = (d: string) => m.meta.detectors[d]?.label[L("en", "zh") as "en" | "zh"] ?? d;
+	const pairs = l.agreement.filter((r) => r.bySource.batch.n).map((r) => [name(r.detector), `${num(r.bySource.batch.agree)}/${num(r.bySource.batch.n)}`]);
+	const en = pairs.map(([d, v]) => `${v} on "${d}"`).join(", "), zh = pairs.map(([d, v]) => `「${d}」${v}`).join("、");
+	const fact = l.sessions.batch
+		? L(`So far ${num(l.sessions.batch)} sessions were labelled after the fact; the code agreed with you ${en || "on none that it judged"}.`, `目前事後標了 ${num(l.sessions.batch)} 段工作，程式和你一致的有：${zh || "沒有程式判斷可比"}。`)
+		: L("No sessions were labelled after the fact yet.", "目前還沒有事後標記。");
+	return [
+		L("Labelled in the moment vs after the fact", "當下標記 vs 事後標記"),
+		L(
+			`After the fact means judging later from a summary an AI wrote; in the moment means judging with /evals label while the work is in front of you. ${fact} A summary leaves things out, so when agreement is low it may be the summary or the code; labels after the fact alone cannot tell which. In-the-moment labels so far: ${num(l.bySource.live)}. Once each kind has at least 20, comparing their agreement shows where the gap comes from.`,
+			`事後標記是事情過了，讀 AI 寫的摘要再判斷；當下標記是工作還在眼前時，用 /evals label 直接判斷。${fact}摘要會漏掉細節，所以一致比例偏低時，可能是摘要沒寫清楚，也可能是程式判斷錯了，只看事後標記分不出來。當下標記目前 ${num(l.bySource.live)} 筆；兩種各累積到至少 20 筆，比較兩邊的一致比例，才看得出落差從哪裡來。`,
+		),
+	];
+}
+
 export function concepts(m: ReportModel, week: Week, c: Change | undefined, L: Words) {
 	const i = c?.impact,
 		n = num(week.reduce((s, r) => s + r.sessions, 0)),
@@ -82,6 +99,7 @@ export function concepts(m: ReportModel, week: Week, c: Change | undefined, L: W
 				),
 		],
 		...workCards(m, L),
+		labelTiming: labelTiming(m, L),
 		check: [
 			L("Code check", "程式檢查"),
 			L(
