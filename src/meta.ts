@@ -248,7 +248,10 @@ export const DETECTOR_META: Record<string, DetectorMeta> = {
 		label: t("Said how to check before editing", "動手前先說好怎麼驗證"),
 		meaning: t("The agent named the check that proves the work (its Anchor) before changing any file.", "代理人在改任何檔案前，先說出用什麼檢查證明工作完成（Anchor）。"),
 		goodDirection: "higher",
-		howComputed: t("Passes when an Anchor line or a todo anchor appears before the first successful edit or write; sessions without edits do not count.", "第一次成功修改或寫檔之前出現 Anchor 行或待辦的 anchor 即通過；沒改檔的工作階段不算。"),
+		howComputed: t(
+			"Passes when, before the first successful edit or write, the agent or its brief named the check (an Anchor, Gates, Checks or 驗證 line, a todo anchor or check spec, or a check command in the brief), or the first change was a test file; sessions without edits do not count.",
+			"第一次成功修改或寫檔之前，代理人或交辦內容已說出檢查（Anchor、Gates、Checks、驗證 等標示行，待辦的 anchor 或檢查設定，或交辦內容裡的檢查指令），或第一個修改的就是測試檔，即通過；沒改檔的工作階段不算。",
+		),
 		example: {
 			pass: t("Writes 'Anchor: `npm test`', then edits src/app.ts.", "先寫「Anchor: `npm test`」，再修改 src/app.ts。"),
 			fail: t("Edits src/app.ts first and names the check afterwards.", "先修改 src/app.ts，之後才說要怎麼檢查。"),
@@ -258,7 +261,10 @@ export const DETECTOR_META: Record<string, DetectorMeta> = {
 		label: t("Ran the check after the last edit", "最後一次修改後有跑檢查"),
 		meaning: t("After its final change, the agent ran the check it named and the check passed.", "最後一次修改後，代理人有跑它說好的檢查，而且通過。"),
 		goodDirection: "higher",
-		howComputed: t("Passes when every command in the Anchor has a passing run after the last edit; sessions with no edit or no runnable Anchor do not count.", "Anchor 裡每個指令在最後一次修改後都有通過的執行即通過；沒改檔或 Anchor 不是可執行指令的不算。"),
+		howComputed: t(
+			"Passes when, after the last edit, every Anchor command passed (in bash or a monitor), the agent recorded passing evidence, or a test, build, lint or type-check run passed; a failing Anchor run fails it. Edits to Markdown or text after the check do not count as edits. Sessions with no edit, only prose edits, or an Anchor that is not a command and no run do not count.",
+			"最後一次修改後，Anchor 每個指令都通過（bash 或 monitor），或代理人記下通過的證據，或有測試、建置、lint、型別檢查通過，即通過；Anchor 指令失敗則不通過。檢查之後才改的 Markdown 或文字檔不算修改。沒改檔、只改文字，或 Anchor 不是指令又沒有執行的不算。",
+		),
 		example: {
 			pass: t("Edits a file, then runs `npm test`, which exits 0.", "改完檔案後執行 `npm test`，結束碼 0。"),
 			fail: t("Runs `npm test`, edits one more file, and stops.", "跑完 `npm test` 又改了一個檔案就結束。"),

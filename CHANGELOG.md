@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- The two anchor checks read the forms agents actually use, checked against 30 sessions you labelled by hand. An anchor counts when the agent or its brief names the check before the first edit: an `Anchor:` line, a `Gates:`, `Checks:`, `Verify:`, `Done when` or `驗證：` line, a todo anchor or sb check spec, or a check command named in the brief. It also counts when the first change is a test file (red first). A brief's anchor is no longer failed as `anchor_only_in_brief`.
+- 「最後一次修改後有跑檢查」 passes on any of these: anchor commands run in a monitor (judged by exit code), passing todo evidence recorded after the last change, or a test, build, lint or type-check run after it. A failing anchor run still fails. Markdown or text written after the check (a report, a changelog) does not undo the check. A session that edits and runs no check now fails (`no_check_after_change`) instead of being left out. A session that edits only prose is `prose_only`.
+- Agreement with your labels: anchor 15/30 → 24/30, check 4/17 → 23/24. Five held-out sessions that edited and ran no check stay failed on both rules.
+- Re-extracts every session once (extractor version 5).
+
 ## 0.5.0
 
 - `/evals label` labels the current session while the work is in front of you: pick a rule (or 「其他」), then 照做, 沒照做 or 看不出來, then an optional note. `/evals label <rule> pass|fail|unclear [note]` does it in one line, and `/evals label undo` withdraws the session's last one. `/evals label <your words>` hands your words to the agent, which turns them into labels and says what it recorded; the verdict and the note stay yours. Each label keeps the todo item in progress.

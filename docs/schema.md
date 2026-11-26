@@ -45,8 +45,8 @@ Back-fill rebuilds each session's items from its `todo/v1` snapshots, diffed alo
 
 | `gen_ai.evaluation.name` | `pass` | `fail` explanations | `na` explanations |
 | --- | --- | --- | --- |
-| `anchor_before_first_edit` | `anchor_first` | `change_before_anchor`, `anchor_only_in_brief` | `no_edit` |
-| `check_after_last_edit` | `anchor_green` | `no_passing_run_after_change` | `no_edit`, `no_anchor`, `anchor_without_command` |
+| `anchor_before_first_edit` | `anchor_first`, `anchor_in_brief`, `test_first` | `change_before_anchor` | `no_edit` |
+| `check_after_last_edit` | `anchor_green`, `evidence_after_change`, `check_run_after_change` | `no_passing_run_after_change`, `no_check_after_change` | `no_edit`, `prose_only`, `anchor_without_command` |
 | `todo_evidence` | `all_evidenced` | `completed_without_evidence` (value = share with evidence) | `no_completed_task` |
 | `close_guard_quiet` | `no_notice` | the commonest notice kind | `no_edit` |
 
