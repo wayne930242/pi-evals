@@ -230,7 +230,8 @@ export function joinWork(options: { summaries: SessionSummary[]; changes: Change
 		const work = s.work as SessionWork;
 		const end = work.lastActivity;
 		sessions.push({ id: s.sessionId, project: s.project, last: end, unattributed: work.unattributed });
-		const top = work.items.filter((it) => it.level === "top");
+		// A task carried in already done is no item here, so it must not win a thread or a child either.
+		const top = work.items.filter((it) => it.level === "top" && !it.carried);
 		const children = childrenOf(s, parentOf, byLogical);
 		const sessionThreads = threads.get(s.sessionId) ?? [];
 		const pairs = new Map(work.pairs.map((p) => [p.thread, p]));

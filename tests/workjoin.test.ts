@@ -183,3 +183,19 @@ test("a handover carries a completed uid task: the item keeps the close, kind an
 	assert.equal(it.session, A2);
 	assert.ok(!file.items.some((i) => i.title === "Old done"), "a task carried in already done is not an item of the new session");
 });
+
+test("a task carried in already done does not take a child by owner name from the session's own item", () => {
+	const session = summarize(`/s/--m--/2026-11-25T10-00-00-000Z_${MAIN}.jsonl`, { id: MAIN, cwd: `${HOME}/projects/demo-repo`, start: START, entries: () => [
+		user(t(0), "go"),
+		todo(t(5), [task(1, "Old done", "completed", { owner: "x-build" })]),
+		...launch("c1", A, "x-build", "worker", 6),
+		todo(t(10), [task(1, "Old done", "completed", { owner: "x-build" }), task(2, "New work", "in_progress", { owner: "x-build" })]),
+		assistant(t(30), [], 1),
+		todo(t(900), [task(1, "Old done", "completed", { owner: "x-build" }), task(2, "New work", "completed", { owner: "x-build" })]),
+		stop(t(910)),
+	] });
+	const file = join_([session, child(A, "x-build", 4)], mkdtempSync(join(tmpdir(), "pi-evals-sb-")));
+	const items = byTitle(file);
+	assert.equal(items["Old done"], undefined);
+	assert.equal(items["New work"]?.childCost, 4);
+});
