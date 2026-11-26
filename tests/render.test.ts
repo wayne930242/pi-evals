@@ -58,7 +58,7 @@ test("headline names the observed direction, never an effect; verdict carries al
 	imp.incomplete = true;
 	imp.smallSample = true;
 	const html = renderHtml(model);
-	for (const note of ["同期還有 3 筆別的調整", "樣本太少", "未滿 7 天"]) assert.ok(html.includes(note), note);
+	for (const note of ["同期還有 3 筆別的調整", "無法分辨是哪一筆造成的", "樣本太少", "未滿 7 天"]) assert.ok(html.includes(note), note);
 });
 test("only eligible changes are highlighted, folded changes still have reachable detail anchors", () => {
 	const html = renderHtml(fixture([change("pin", "pin"), change("rule", "folded <note>"), change("model-routing", "route")], 3));

@@ -41,7 +41,7 @@ export function verdict(c: Change, rs: Reading[], L: Words): string {
 	}
 	if (i.incomplete) notes.push(L(`less than ${i.window.days} days on one side`, `一側未滿 ${i.window.days} 天`));
 	if (!rs.some(comparable)) notes.push(L("no comparable readings", "沒有可比較的數字"));
-	const other = i.confounded ? L(`${num(i.confounded)} other changes in the same period`, `同期還有 ${num(i.confounded)} 筆別的調整`) : "";
+	const other = i.confounded ? L(`${num(i.confounded)} other changes in the same period`, `同期還有 ${num(i.confounded)} 筆別的調整`) + L("; we cannot tell which change mattered", "，無法分辨是哪一筆造成的") : "";
 	if (notes.length || other) {
 		return [notes.length ? L(`Too early to tell: ${notes.join("; ")}`, `還看不出來（${notes.join("、")}）`) : "", other].filter(Boolean)
 			.join(" · ");
