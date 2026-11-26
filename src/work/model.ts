@@ -166,7 +166,7 @@ export function workModel(file: ItemsFile | undefined, filter: Filter) {
 				since: it.open!.since,
 				kind: it.open!.kind,
 				on: it.open!.on ?? null,
-				/** Minutes from the start of the wait to the item's last activity's day end or the build, whichever is first. */
+				/** Minutes from the start of the wait to when the items were built (the extract). */
 				waitMinutes: minutes(Math.max(0, Date.parse(file.built) - Date.parse(it.open!.since))),
 				childCost: round(it.childCost),
 				mainCost: round(it.mainCost),

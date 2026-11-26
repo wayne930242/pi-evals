@@ -40,6 +40,11 @@ export interface ItemRaw {
 	uid?: string;
 	/** Session the task was imported from (todo `origin.session`). */
 	origin?: string;
+	/**
+	 * Already completed or deleted when this session first saw it: in the branch's first snapshot (a list carried over
+	 * from another tool or session), imported into an empty list, or with an `origin`. It was not closed here.
+	 */
+	carried?: true;
 	/** `nested` when the session is itself a subagent: a sub-item of the parent's item, not counted on its own. */
 	level: "top" | "nested";
 	status: ItemStatus;
@@ -119,15 +124,17 @@ function liteOf(raw: unknown): TaskLite | undefined {
 	}
 	// Only a `child:<subagent id>` ref is kept: it joins the child to the item. A tool call id needs no storing.
 	const refs = evidence.map((e) => str(e.ref)).filter((r): r is string => !!r && CHILD_REF.test(r));
-	const uid = str(t.uid);
-	const origin = str(obj(t.origin).session);
+	// A uid or origin that is not name-shaped would become the shared key "redacted": drop it instead.
+	const named = (v: unknown) => (typeof v === "string" && v && safeName(v) === v ? v : undefined);
+	const uid = named(t.uid);
+	const origin = named(obj(t.origin).session);
 	return {
 		id: t.id,
 		status,
 		title: titleOf(t.subject),
 		owner: str(t.owner) ? safeName(t.owner) : undefined,
-		uid: uid ? safeName(uid) : undefined,
-		origin: origin ? safeName(origin) : undefined,
+		uid,
+		origin,
 		evidence: evidence.length,
 		shas,
 		refs,
@@ -302,9 +309,12 @@ export class WorkTracker {
 			for (let i = leaf; i >= 0; i = this.snaps[i].pred) chain.unshift(i);
 			const live = new Map<number, { identity: string; item?: ItemRaw }>();
 			const leafTs = this.snaps[leaf].ts;
+			let prevSize = -1;
 			for (const si of chain) {
 				const snap = this.snaps[si];
 				const seen = new Set<number>();
+				const fresh = prevSize <= 0;
+				prevSize = snap.tasks.length;
 				for (const task of snap.tasks) {
 					seen.add(task.id);
 					let cur = live.get(task.id);
@@ -312,6 +322,7 @@ export class WorkTracker {
 						const identity = `${si}:${task.id}`;
 						const known = done.get(identity);
 						cur = { identity, item: known ? undefined : this.newItem(session, nested, task, snap, si, main, reuse) };
+						if (cur.item && (task.status === "completed" || task.status === "deleted") && (fresh || task.origin)) cur.item.carried = true;
 						live.set(task.id, cur);
 						if (cur.item) {
 							done.set(identity, cur.item);

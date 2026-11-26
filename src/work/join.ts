@@ -196,31 +196,30 @@ function byTime(items: ItemRaw[], at: string, end: string): ItemRaw | undefined 
 	return before[0] ?? items[0];
 }
 
-function childrenOf(s: SessionSummary, bySession: Map<string, SessionSummary[]>, byLogical: Map<string, SessionSummary>): Child[] {
-	const work = s.work;
-	const seen = new Set<string>();
+/** The children of one session: each child belongs to one parent, the one its brief names, else the one that spawned it. */
+function childrenOf(s: SessionSummary, parentOf: Map<string, string>, byLogical: Map<string, SessionSummary>): Child[] {
+	const launches = new Map((s.work?.launches ?? []).map((l) => [l.id, l]));
+	const ids = new Set([...s.spawned.map((sp) => sp.id), ...[...parentOf].filter(([, p]) => p === s.sessionId).map(([id]) => id)]);
 	const out: Child[] = [];
-	const launches = new Map((work?.launches ?? []).map((l) => [l.id, l]));
-	const add = (c: SessionSummary | undefined, id: string) => {
-		if (seen.has(id)) return;
-		seen.add(id);
+	for (const id of ids) {
+		if (parentOf.get(id) !== s.sessionId) continue;
+		const c = byLogical.get(id);
 		const l = launches.get(id);
 		out.push({ id, name: c?.childName ?? l?.name, cost: c?.cost ?? 0, role: l?.role ?? "unknown", model: c?.model ?? l?.model ?? "unknown", at: l?.at ?? c?.start ?? s.start, cwd: c?.cwd });
-	};
-	for (const c of bySession.get(s.sessionId) ?? []) if (c.logicalId) add(c, c.logicalId);
-	for (const sp of s.spawned) add(byLogical.get(sp.id), sp.id);
+	}
 	return out;
 }
 
 export function joinWork(options: { summaries: SessionSummary[]; changes: Change[]; sbDir: string; repos: string[]; lines?: Lines; now: Date }): ItemsFile {
 	const { summaries, changes } = options;
 	const withWork = summaries.filter((s) => s.work?.items.length);
-	const bySession = new Map<string, SessionSummary[]>();
+	const parentOf = new Map<string, string>();
 	const byLogical = new Map<string, SessionSummary>();
+	for (const s of summaries) for (const sp of s.spawned) parentOf.set(sp.id, s.sessionId);
 	for (const s of summaries) {
 		if (s.kind !== "subagent") continue;
 		if (s.logicalId) byLogical.set(s.logicalId, s);
-		if (s.parentId) bySession.set(s.parentId, [...(bySession.get(s.parentId) ?? []), s]);
+		if (s.logicalId && s.parentId) parentOf.set(s.logicalId, s.parentId);
 	}
 	const threads = readThreads(options.sbDir, new Set(withWork.map((s) => short(s.sessionId))));
 	const cars = readCars(options.sbDir);
@@ -232,7 +231,7 @@ export function joinWork(options: { summaries: SessionSummary[]; changes: Change
 		const end = work.lastActivity;
 		sessions.push({ id: s.sessionId, project: s.project, last: end, unattributed: work.unattributed });
 		const top = work.items.filter((it) => it.level === "top");
-		const children = childrenOf(s, bySession, byLogical);
+		const children = childrenOf(s, parentOf, byLogical);
 		const sessionThreads = threads.get(s.sessionId) ?? [];
 		const pairs = new Map(work.pairs.map((p) => [p.thread, p]));
 		const itemOf = (it: ItemRaw) => new Set([it.key, it.uid, `${short(s.sessionId)}#${it.id}`].filter(Boolean) as string[]);
@@ -310,6 +309,8 @@ export function joinWork(options: { summaries: SessionSummary[]; changes: Change
 				return !!lastStart && (!lastResult || lastResult < lastStart);
 			});
 		for (const it of work.items) {
+			// Closed before this session saw it: its close belongs to the session (or tool) that closed it.
+			if (it.carried) continue;
 			const kids = it.level === "top" ? childCost.get(it) : undefined;
 			const th = threadOf.get(it);
 			const activeMs = it.active.reduce((sum, [a, b]) => sum + Math.max(0, ms(b ?? end) - ms(a)), 0);
@@ -396,7 +397,11 @@ function mergeByKey(items: WorkItem[]): WorkItem[] {
 			continue;
 		}
 		group.sort((a, b) => a.lastActivity.localeCompare(b.lastActivity));
-		const last = group.at(-1)!;
+		// The close, its kind, signal and thread come from the copy that closed the item, not from the newest copy.
+		const closing = group.filter((g) => g.status === "completed" || g.status === "deleted").sort((a, b) => (a.close ?? "").localeCompare(b.close ?? "")).at(-1);
+		const newest = group.at(-1)!;
+		const reopened = closing && newest.status === "in_progress" && (newest.start ?? "") > (closing.close ?? "");
+		const last = closing && !reopened ? closing : newest;
 		const starts = group.map((g) => g.start).filter((x): x is string => !!x).sort();
 		const stallMs: WorkItem["stallMs"] = {};
 		for (const g of group) for (const [k, v] of Object.entries(g.stallMs) as [StallKind, number][]) stallMs[k] = (stallMs[k] ?? 0) + v;

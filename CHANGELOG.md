@@ -7,7 +7,7 @@
 - A work item's title (its todo subject, at most 80 characters) is the only source text pi-evals stores.
 - `evals_query` has an `items` view, and `findings` adds a line when a like-with-like difference or a long wait stands out.
 - A label of `unclear` is left out of the agreement rate and counted on its own (「看不出來」).
-- Re-extracts every session once (extractor version 3).
+- Re-extracts every session once (extractor version 4).
 
 ## 0.3.0
 

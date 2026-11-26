@@ -146,3 +146,26 @@ test("titles are one line of at most 80 characters", () => {
 	assert.equal(Array.from(titleOf(long)).length, 80);
 	assert.equal(titleOf(undefined), "");
 });
+
+test("a task first seen already done was carried in (list switch, import), not closed in this session", () => {
+	const w = work({
+		entries: (t) => [
+			todo(t(1), [task(1, "completed"), task(2, "in_progress"), task(3, "deleted")]),
+			todo(t(2), [task(1, "completed"), task(2, "completed"), task(3, "deleted"), task(4, "completed")]),
+			todo(t(3), []),
+			todo(t(4), [{ id: 7, subject: "Imported done", status: "completed" }, { id: 8, subject: "Imported open", status: "in_progress" }]),
+		],
+	});
+	const items = byKey(w);
+	assert.equal(items[`${SID}#1`].carried, true, "already completed in the first snapshot");
+	assert.equal(items[`${SID}#3`].carried, true, "already deleted in the first snapshot");
+	assert.equal(items[`${SID}#2`].carried, undefined, "in progress when carried in, closed here");
+	assert.equal(items[`${SID}#4`].carried, undefined, "created done later in the session: closed here");
+	assert.equal(items[`${SID}#7`].carried, true, "imported into an empty list already completed");
+	assert.equal(items[`${SID}#8`].carried, undefined);
+});
+
+test("a uid or origin that is not name-shaped is not a key", () => {
+	const w = work({ entries: (t) => [todo(t(1), [{ id: 1, subject: "x", status: "in_progress", uid: "has space", origin: { session: "a b" } }])] });
+	assert.equal(w.items[0].key, `${SID}#1`);
+});

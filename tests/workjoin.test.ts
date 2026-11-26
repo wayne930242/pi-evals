@@ -163,3 +163,23 @@ test("the items query view and its findings line stay small and say when items a
 	assert.match(text, /- "Build A" \$6\.02 \(main \$2\.02 \+ sub \$4\.00\)/);
 	assert.equal(itemsFinding(m), "Work items: 1 open item(s) waiting over 1h, longest 68m on e-build → items", "a long wait on a subagent stands out; three items compare nothing");
 });
+
+test("a handover carries a completed uid task: the item keeps the close, kind and thread of the session that closed it", () => {
+	const A2 = "01a20000-0000-7000-8000-0000000000c3";
+	const B2 = "01a20000-0000-7000-8000-0000000000d4";
+	const at = (s: number) => new Date(Date.parse(START) + s * 1000).toISOString();
+	const session = (id: string, start: number, entries: Record<string, unknown>[]) => summarize(`/s/--m--/2026-11-25T10-00-00-000Z_${id}.jsonl`, { id, cwd: `${HOME}/projects/demo-repo`, start: at(start), entries: () => entries });
+	const a = session(A2, 0, [user(at(0), "go"), todo(at(10), [{ id: 1, subject: "Build A", status: "in_progress", uid: "t_aaaaaaaaaa", owner: "a-build" }]), assistant(at(20), [], 1), todo(at(600), [{ id: 1, subject: "Build A", status: "completed", uid: "t_aaaaaaaaaa", owner: "a-build" }]), stop(at(610))]);
+	const later = 86_400 * 3;
+	const b = session(B2, later, [user(at(later), "resume"), todo(at(later + 5), [{ id: 1, subject: "Build A", status: "completed", uid: "t_aaaaaaaaaa", owner: "a-build", origin: { session: A2 } }, { id: 2, subject: "Old done", status: "completed" }]), stop(at(later + 10))]);
+	const dir = mkdtempSync(join(tmpdir(), "pi-evals-sb-"));
+	mkdirSync(join(dir, "threads", A2.slice(0, 8)), { recursive: true });
+	writeFileSync(join(dir, "threads", A2.slice(0, 8), "T1.json"), JSON.stringify({ id: "T1", owner: A2, worker: "a-build", reviewer: "a-review", item: "t_aaaaaaaaaa", closed: Date.parse(at(590)), closedAs: "done", created: Date.parse(at(15)) }));
+	const file = joinWork({ summaries: [a, b], changes: [], sbDir: dir, repos: [], now: new Date(at(later + 86_400)) });
+	const it = file.items.find((i) => i.key === "t_aaaaaaaaaa")!;
+	assert.equal(it.close, at(600));
+	assert.equal(it.closeKind, "review_done");
+	assert.equal(it.thread, "T1");
+	assert.equal(it.session, A2);
+	assert.ok(!file.items.some((i) => i.title === "Old done"), "a task carried in already done is not an item of the new session");
+});

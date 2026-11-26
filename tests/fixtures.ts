@@ -81,6 +81,7 @@ export function richSession(home: string, sessionId = "01a20000-0000-7000-8000-0
 			assistant(t(143), [call("c-sub", "subagent", { agent: `reviewer ${SECRET}`, model: "openai/gpt-6.2-sol", task: SECRET })]),
 			result(t(144), "c-sub", "subagent", { durationMs: 74, details: { id: "11111111-2222-4333-8444-555555555555", name: SECRET, agent: "reviewer", model: "openai/gpt-6.2-sol", task: SECRET, sessionFile: `/x/${SECRET}.jsonl` } }),
 			customMessage(t(145), "pi-herdr-agents:declared-skills", `<skill name="agent-terse" location="/x/SKILL.md">${SECRET}</skill>`),
+			custom(t(145), "todo/v1", { v: 1, nextId: 2, tasks: [{ id: 1, subject: `${SECRET} ${"x".repeat(80)} ${SECRET_TOKEN}`, description: SECRET, activeForm: SECRET, status: "in_progress" }] }),
 			custom(t(146), "todo/v1", { v: 1, nextId: 3, tasks: [{ id: 1, subject: `${SECRET} ${"x".repeat(80)} ${SECRET_TOKEN}`, description: SECRET, activeForm: SECRET, anchor: SECRET, owner: SECRET, status: "completed", evidence: [{ command: SECRET, sha: SECRET_TOKEN, ref: SECRET_TOKEN, result: "pass", at: t(146) }] }, { id: 2, subject: SECRET, status: "completed" }] }),
 			customMessage(t(147), "anchorloop-close-guard", "anchorloop: no passing run of `npm test` after the last change."),
 			{ type: "compaction", timestamp: t(148), summary: SECRET, firstKeptEntryId: "e1", tokensBefore: 1000 },
