@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+- The analysis scripts from labelling and error analysis ship in `scripts/`: `freshness` (is the index current; exits 1 when summaries come from mixed extractor versions), `disagree <rule>` (where the code and your labels disagree, session by session, and which way), `by-version <detector>` (pass rate per package version), `sample <n>` (a stratified, seeded sample of unlabelled sessions to label), `label-import <answers>` (a submitted label form into `labels.jsonl`), and `session-shape <id>` (the ordered events the detectors see, without message text). Output over 2,000 bytes goes to a file under `runs/` in the state dir.
+- `/evals run` lists the scripts with what each is for; `/evals run <script> [args]` runs one and shows its output, with script names completed.
+- The analyzing-evals skill names these scripts at the steps that use them: freshness first, disagree and session-shape when a number looks wrong, sample and label-import for hand labels.
+
 ## 0.6.1
 
 - An extract stopped part-way after an extractor upgrade no longer passes off old results as current. Each session file's summary now records the extractor version that wrote it, and any other version is read again. Before, the first 0.6.0 extract was killed by a timeout and saved the new version mark while most summaries were still old, so the next run skipped them: check agreement read 11/20 instead of 23/24 until a full rebuild. Every session is read once more (extractor version 6).

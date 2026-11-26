@@ -1,5 +1,5 @@
 /**
- * pi-evals: the live observer, the `/evals` command (status, extract, report, mark, label), `/ask-ai`, and the `evals_query` and `evals_label` tools.
+ * pi-evals: the live observer, the `/evals` command (status, extract, report, mark, label, run), `/ask-ai`, and the `evals_query` and `evals_label` tools.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -25,7 +25,32 @@ export function cliPath(): { cmd: string; args: string[] } | undefined {
 	return found ? { cmd: process.execPath, args: [found] } : undefined;
 }
 
-const SUBCOMMANDS = ["status", "findings", "extract", "report", "mark", "label"];
+const SUBCOMMANDS = ["status", "findings", "extract", "report", "mark", "label", "run"];
+
+/** The shipped analysis scripts (`scripts/<name>.mjs`) `/evals run` offers, with what each is for. */
+export const SCRIPTS: Record<string, string> = {
+	freshness: "索引是不是最新的：最後擷取時間、各擷取器版本的摘要數；版本混雜時數字不能看",
+	disagree: "某條規則上程式判定和你的標記哪裡不一致，逐段列出，看偏哪一邊（用法：disagree <規則> [--range 天數]）",
+	"by-version": "某項檢查在各套件版本下的通過率（用法：by-version <檢查> [--pkg 套件]）",
+	sample: "分層抽樣還沒標過的工作段，給你手動標記（只有 id 與屬性）（用法：sample <數量> [--since 時間] [--seed 數字]）",
+	"label-import": "把填好的標記表單答案寫進 labels.jsonl（用法：label-import <答案檔> [--sample 樣本檔]）",
+	"session-shape": "一段工作的結構軌跡：檢查看到的事件順序，不含訊息內容（用法：session-shape <session id>）",
+	"change-impact": "某次調整前後的數字（用法：change-impact <時間或 sha> [套件或種類]）",
+	"skill-days": "某個 skill 每天被載入的工作段數（用法：skill-days <skill> [專案]）",
+	"package-errors": "某個套件每天的工具出錯數（用法：package-errors <套件> [專案]）",
+};
+
+/** Runs one shipped script with the session's environment; resolves with its exit code and output. */
+function runScript(name: string, args: string[], env: Env): Promise<{ code: number | null; out: string }> {
+	return new Promise((resolve) => {
+		const child = spawn(process.execPath, [fileURLToPath(new URL(`../scripts/${name}.mjs`, import.meta.url)), ...args], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+		let out = "";
+		child.stdout?.on("data", (c: Buffer) => void (out += c.toString()));
+		child.stderr?.on("data", (c: Buffer) => void (out += c.toString()));
+		child.on("error", (error) => resolve({ code: -1, out: error.message }));
+		child.on("close", (code) => resolve({ code, out: out.trim() }));
+	});
+}
 
 function parseFlags(args: string[]) {
 	const out: { since?: string; days?: number; project?: string; rest: string[] } = { rest: [] };
@@ -100,8 +125,12 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		};
 
 		pi.registerCommand("evals", {
-			description: "Usage and process records: /evals [status|findings|extract|report|mark <note>|label]",
+			description: "Usage and process records: /evals [status|findings|extract|report|mark <note>|label|run <script>]",
 			getArgumentCompletions: (prefix: string) => {
+				if (prefix.startsWith("run ")) {
+					const names = Object.keys(SCRIPTS).filter((n) => n.startsWith(prefix.slice(4)));
+					return names.length ? names.map((n) => ({ value: `run ${n}`, label: n, description: SCRIPTS[n] })) : null;
+				}
 				const items = SUBCOMMANDS.filter((s) => s.startsWith(prefix)).map((s) => ({ value: s, label: s }));
 				return items.length ? items : null;
 			},
@@ -141,6 +170,18 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 					ctx.ui.notify(`pi-evals: marked ${change.at}: ${text}`, "info");
 				} else if (sub === "label") {
 					await labels.command(words.slice(1), ctx);
+				} else if (sub === "run") {
+					const name = words[1];
+					if (!name) {
+						ctx.ui.notify(`pi-evals scripts (/evals run <script> [args]):\n${Object.entries(SCRIPTS).map(([n, what]) => `${n}　${what}`).join("\n")}`, "info");
+						return;
+					}
+					if (!Object.hasOwn(SCRIPTS, name)) {
+						ctx.ui.notify(`Unknown script "${name}". /evals run lists them.`, "warning");
+						return;
+					}
+					const { code, out } = await runScript(name, words.slice(2), env);
+					ctx.ui.notify(out || `${name}: no output (exit ${code})`, code === 0 ? "info" : "warning");
 				} else {
 					ctx.ui.notify(`Unknown subcommand "${sub}". Use: ${SUBCOMMANDS.join(", ")}.`, "warning");
 				}

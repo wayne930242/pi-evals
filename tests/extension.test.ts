@@ -203,3 +203,25 @@ test("evals_query answers every view within the size bound, names staleness, and
 	await assert.rejects(exec({ view: "skills", since: "yesterday" }), /YYYY-MM-DD/);
 	assert.ok(Buffer.byteLength(tool.description) < 300, "short description");
 });
+
+test("/evals run lists the shipped scripts in plain words, runs one, completes names, and refuses unknown ones", async () => {
+	const h = setup();
+	const cmd = h.command() as unknown as { handler: (a: string, c: unknown) => Promise<void>; getArgumentCompletions: (p: string) => { value: string }[] | null };
+	await cmd.handler("run", h.ctx);
+	const list = h.notes.at(-1)?.text ?? "";
+	for (const name of ["freshness", "disagree", "by-version", "sample", "label-import", "session-shape", "change-impact", "skill-days", "package-errors"]) assert.match(list, new RegExp(`^${name}`, "m"));
+	assert.match(list, /索引/);
+	await runExtract({ env: h.env, workers: 0 });
+	await cmd.handler("run freshness", h.ctx);
+	assert.match(h.notes.at(-1)?.text ?? "", /Fresh: every summary/);
+	assert.equal(h.notes.at(-1)?.level, "info");
+	await cmd.handler("run session-shape 01a20000-0000-7000-8000-000000000001", h.ctx);
+	assert.match(h.notes.at(-1)?.text ?? "", /anchor_before_first_edit: pass/);
+	assert.ok(!h.notes.some((n) => n.text.includes(SECRET)));
+	await cmd.handler("run disagree", h.ctx);
+	assert.equal(h.notes.at(-1)?.level, "warning");
+	await cmd.handler("run ../cli", h.ctx);
+	assert.match(h.notes.at(-1)?.text ?? "", /Unknown script/);
+	assert.deepEqual(cmd.getArgumentCompletions("run se")?.map((c) => c.value), ["run session-shape"]);
+	assert.ok(cmd.getArgumentCompletions("r")?.some((c) => c.value === "run"));
+});

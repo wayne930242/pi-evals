@@ -56,7 +56,7 @@ function commandsOf(text: string, bare: boolean): string[] {
 const LABEL = String.raw`(?:reality anchor|anchor|checks?|gates?|verify|verification|done when|驗證|檢查|驗收)`;
 const LABELLED = new RegExp(String.raw`^[ \t>*_#-]*${LABEL}[*_]*\s*[:：][*_]*\s*(.+)$`, "gim");
 
-function anchorLine(text: string): string | undefined {
+export function anchorLine(text: string): string | undefined {
 	return [...text.matchAll(LABELLED)].at(-1)?.[1];
 }
 
@@ -82,6 +82,8 @@ const DOTNET_SCRIPT = String.raw`\S*dotnet[\w-]*\.py\s+(?:build|test)\b`;
 const RUN_START = new RegExp(String.raw`^(?:(?:\S*/)?(?:${RUNNER.source})|${INTERPRETER}?(?:${CHECK_SCRIPT}|${DOTNET_SCRIPT}|\S*\btests?/\S+))`, "i");
 // A mention in prose, as in a brief: a runner or a check script anywhere in a line.
 const MENTION = new RegExp(String.raw`(?:^|[\s\x60("'>/])(?:${RUNNER.source}|${CHECK_SCRIPT})`, "im");
+/** Whether a brief names a check: a labelled check line, or a runner or check script anywhere in it. */
+export const namesCheck = (text: string) => anchorLine(text) !== undefined || MENTION.test(text);
 // Shell lead-ins stripped from each command segment before matching.
 const LEAD = /^(?:[({!]\s*|(?:time|exec|command|nice|sudo\s+-n|timeout\s+\d+[smh]?|set\s+-\S+(?:\s+\S+)?)\s+|[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S*)\s+)+/;
 

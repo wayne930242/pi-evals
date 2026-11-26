@@ -51,9 +51,25 @@ The observer loads in every session, subagents included.
 | `/evals label <rule> pass\|fail\|unclear [note]` | The same in one line; `<rule>` is a check name (`anchor_before_first_edit`, `check_after_last_edit`, `todo_evidence`, `close_guard_quiet`, `plan_names_graph`) or `other`. |
 | `/evals label <your words>` | Anything else, e.g. `/evals label 剛剛沒先跑測試就說完成`: the agent turns your words into labels with `evals_label` and says in one line what it recorded. The verdict is yours and your words are kept as the note. |
 | `/evals label undo` | Withdraws the current session's last label given in the moment. |
+| `/evals run` | Lists the shipped analysis scripts, each with what it is for. |
+| `/evals run <script> [args]` | Runs one and shows its output; output over 2,000 bytes goes to a file under `runs/` in the state dir and the reply names it. |
 
 A label records the session, the time, and the key of the todo item in progress, if any (its `uid`, else `<session>#<id>`, as work items are keyed).
 It reaches the report and `evals_query` at their next read, without an extract.
+
+### Analysis scripts
+
+Shipped in `scripts/`; run them with `/evals run`, or with `node <package>/scripts/<name>.mjs` (agents do, through the analyzing-evals skill). They read the index, checkpoint, labels and change timeline, never a transcript into their output; `session-shape` reads one session file to classify its events and prints no message text.
+
+| Script | What it answers |
+| --- | --- |
+| `freshness` | Is the index current: last extract, summaries per extractor version, a run stopped part-way. Exits 1 when versions are mixed. |
+| `disagree <rule> [--range DAYS]` | Each labelled session where the code and your verdict in effect disagree, with the code's reason and where the label came from, and which way they lean. |
+| `by-version <detector> [--pkg PACKAGE]` | Pass rate and n per package version at session start (anchorloop by default; pi-straw-boss for `plan_names_graph`). |
+| `sample <n> [--since ISO] [--seed N]` | A seeded sample of judged sessions you have not labelled, spread over project, kind, model and size, written to `labels/sample-<date>.json` (ids and metadata only). |
+| `label-import <answer-file> [--sample FILE]` | Your submitted label form (`- <n>_<rule>: pass`, `- <n>_type: …`, `- <n>_note: …`) as after-the-fact labels in `labels.jsonl`. |
+| `session-shape <session id>` | The events the detectors see, in order: tools, edit paths, check runs by exit code, todo statuses and evidence, close-guard reminders, the sb role; then each detector's verdict. |
+| `change-impact`, `skill-days`, `package-errors` | A change's numbers before and after; a skill's sessions per day; a package's errors per day. |
 
 ### `/ask-ai`: get an answer before the agent acts
 

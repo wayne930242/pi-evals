@@ -44,6 +44,11 @@ function text(content: unknown): string {
 	return Array.isArray(content) ? content.map((p) => (obj(p).type === "text" ? String(obj(p).text ?? "") : "")).join("\n") : "";
 }
 
+/** A main's kind from the sb role prompt section, if it is a main's prompt. */
+export function sbKindOf(section: string): string | undefined {
+	return STANDING_PROMPT.test(section) ? "standing" : MAIN_PROMPT.exec(section)?.[1];
+}
+
 export class PlanGraphTracker {
 	private kind: string | undefined;
 	private wasMain = false;
@@ -73,7 +78,7 @@ export class PlanGraphTracker {
 		if (message.role === "system") {
 			const section = obj(message.sections)["straw-boss"];
 			if (typeof section !== "string") return;
-			this.setKind(STANDING_PROMPT.test(section) ? "standing" : MAIN_PROMPT.exec(section)?.[1]);
+			this.setKind(sbKindOf(section));
 		} else if (message.role === "assistant" && Array.isArray(message.content)) {
 			for (const raw of message.content) {
 				const part = obj(raw);
