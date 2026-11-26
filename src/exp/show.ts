@@ -19,7 +19,7 @@ const pct = (v: number | undefined) => (v === undefined || Number.isNaN(v) ? "â€
 const pp = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}`;
 const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - s.length));
 
-export function show(meta: RunMeta, summary: Summary, records: TrialRecord[]): string {
+export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], agreement: { rule: string; n: number; agree: number; unclear: number; disagree: string[] }[] = []): string {
 	const arms = summary.arms.map((a) => a.arm);
 	const guarded = (arm: string) => [...(meta.arms[arm]?.extensions ?? [])].some((e) => /close-guard/.test(e));
 	const out: string[] = [];
@@ -49,6 +49,7 @@ export function show(meta: RunMeta, summary: Summary, records: TrialRecord[]): s
 		out.push(pad(row.task, 24) + pad(row.kind, 12) + cells.join("") + (row.delta === undefined ? "" : pp(row.delta)));
 	}
 	if (summary.doneClaimFail.length) out.push("", `done claimed but check failed: ${summary.doneClaimFail.map((d) => `${d.task}/${d.arm}/${d.n}`).join(", ")}`);
+	for (const a of agreement) out.push(`labels vs graders, ${a.rule}: ${a.agree}/${a.n} agree${a.unclear ? `, ${a.unclear} unclear` : ""}${a.disagree.length ? `; disagree: ${a.disagree.join(", ")}` : ""}`);
 	const invalid = records.filter((r) => !r.valid);
 	if (invalid.length) out.push(`invalid: ${invalid.map((r) => `${r.task}/${r.arm}/${r.n} (${r.invalid})`).join(", ")}`);
 	return out.join("\n");

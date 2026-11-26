@@ -19,8 +19,9 @@ export type FailureType = (typeof FAILURE_TYPES)[number];
 /**
  * `live-prompt`: the user's words after `/evals label`, which the agent turned into rows on the user's behalf.
  * `recheck`: the user's later verdict on a label given after the fact; it replaces that label.
+ * `experiment`: a verdict on a `pi-evals exp` trial; read by `exp show`, never by the monitoring report.
  */
-export type LabelSource = "batch" | "live" | "live-prompt" | "correction" | "recheck";
+export type LabelSource = "batch" | "live" | "live-prompt" | "correction" | "recheck" | "experiment";
 export const NOTE_MAX = 500;
 
 const t = (en: string, zh: string): Text => ({ en, zh });
@@ -186,7 +187,8 @@ export function labelsModel(labelsFile: string, evalsFile: string, scope: LabelS
 		if (scope.selected.has(id)) return true;
 		return r.source !== undefined && !scope.indexed?.has(id) && typeof r.at === "string" && inDates(r.at) && (!scope.project || r.project === scope.project);
 	};
-	const rows = readLabels(labelsFile).filter(inScope);
+	// Experiment trials are not production sessions: their labels are read by `pi-evals exp show` only.
+	const rows = readLabels(labelsFile).filter((r) => r.source !== "experiment" && inScope(r));
 	const human = rows.filter((r) => r.annotator !== "agent");
 	const by = new Map<string, { unclear: number; batch: Count; live: Count }>();
 	const sessions = { batch: new Set<string>(), live: new Set<string>() };

@@ -1,7 +1,9 @@
 /** `pi-evals exp check|run|grade|show`: paired experiments, CLI-only (the extension never imports src/exp). */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { layout } from "../paths.ts";
 import { buildFixture } from "./fixture.ts";
+import { applyLabelAnswer, labelAgreement, writeLabelQueue } from "./labels.ts";
 import { experimentsDir, fixturesDir, readResults, readRun, regradeRun, runExperiment, selectTasks, writeSummary } from "./run.ts";
 import { show } from "./show.ts";
 import { latestRecords } from "./summary.ts";
@@ -11,7 +13,8 @@ import { gate } from "./validity.ts";
 export const EXP_USAGE = `  pi-evals exp check <suite> [--task id]... [--rebuild]
   pi-evals exp run <suite> --arms a,b --k N [--tasks a,b] [--parallel N] [--run-id id] [--pi <bin>]
   pi-evals exp grade <run-id|dir>
-  pi-evals exp show <run-id|dir> [--json]`;
+  pi-evals exp show <run-id|dir> [--json]
+  pi-evals exp label <run-id|dir> [--answer <file|->]   (page of flipped trials; --answer writes the labels)`;
 
 function flag(args: string[], name: string): string | undefined {
 	const i = args.indexOf(name);
@@ -70,7 +73,22 @@ export async function expMain(args: string[]): Promise<number> {
 		const dir = runDirOf(target);
 		const meta = readRun(dir);
 		const summary = writeSummary(dir, meta);
-		process.stdout.write(rest.includes("--json") ? `${JSON.stringify(summary, null, 2)}\n` : `${show(meta, summary, latestRecords(readResults(dir)))}\n`);
+		const records = latestRecords(readResults(dir));
+		const agreement = labelAgreement(meta, records, layout().labels);
+		process.stdout.write(rest.includes("--json") ? `${JSON.stringify({ ...summary, agreement }, null, 2)}\n` : `${show(meta, summary, records, agreement)}\n`);
+		return 0;
+	}
+	if (sub === "label" && target) {
+		const dir = runDirOf(target);
+		const meta = readRun(dir);
+		const answer = flag(rest, "--answer");
+		if (answer) {
+			const rows = applyLabelAnswer(dir, meta, readFileSync(answer === "-" ? 0 : answer, "utf8"), layout().labels);
+			process.stdout.write(`wrote ${rows.length} experiment label(s) to ${layout().labels}\n`);
+			return rows.length ? 0 : 1;
+		}
+		const q = writeLabelQueue(dir, meta, readResults(dir));
+		process.stdout.write(`${q.items.length} flipped trial(s): ${q.page}\n`);
 		return 0;
 	}
 	process.stderr.write(`usage:\n${EXP_USAGE}\n`);
