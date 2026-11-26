@@ -6,9 +6,17 @@ import { sections } from "./report/sections.ts";
 import { css } from "./report/style.ts";
 import { timeline } from "./report/timeline.ts";
 import { PRESETS, type Preset, suffix } from "./ranges.ts";
+import { trendPair } from "./trends.ts";
+import type { Words } from "./report/format.ts";
 import { periodRows, workload } from "./report/week.ts";
 export type { Lang } from "./report/format.ts";
 
+function weeklyPanel(m: ReportModel, L: Words) {
+	const w = m.weekly, p = w?.packages[0];
+	if (!w || (!p && !w.monitors)) return "";
+	const rows = [p && `${p.name === "unknown" ? L("Tools with no known package", "套件不明的工具") : p.name} ${L("errors/calls", "錯誤數/呼叫數")} ${trendPair(p)}`, w.monitors && `${L("Failed/finished jobs", "失敗數/已結束工作數")} ${trendPair(w.monitors)}`];
+	return `<section class="panel"><h2>${L("Weekly error increases", "每週錯誤比例上升")}</h2><p>${esc(w.start)}–${esc(w.end)} UTC · ${L("Earlier week → later week", "前一週 → 後一週")}</p>${rows.filter(Boolean).map(s => `<p>${esc(s!)}</p>`).join("")}</section>`;
+}
 export function renderHtml(m: ReportModel, lang: Lang = "zh", range: Preset | "custom" = "custom"): string {
 	const L = words(lang), w = periodRows(m), t = timeline(m, w, lang, range), c = concepts(m, w, t.lead, L);
 	const nav = [
@@ -45,7 +53,7 @@ export function renderHtml(m: ReportModel, lang: Lang = "zh", range: Preset | "c
 		L(`${t.count} changes worth a closer look`, `${t.count === 2 ? "兩" : t.count === 1 ? "一" : "零"}筆值得回看的調整`)
 	}</h2><div class="layout"><div class="rail">${
 		t.cards || `<p>${L("Nothing to highlight yet.", "還沒有適合比較的調整。")}</p>`
-	}</div><aside class="side">${workload(w, L)}${lesson(c.record, L)}${lesson(c.metric, L)}</aside></div><details><summary>${
+	}</div><aside class="side">${workload(w, L)}${weeklyPanel(m, L)}${lesson(c.record, L)}${lesson(c.metric, L)}</aside></div><details><summary>${
 		L("How to read the comparisons", "怎麼讀時間軸上的比較？")
 	}</summary><div class="notes-grid">${lesson(c.sample, L)}${lesson(c.confounding, L)}${lesson(c.check, L)}</div></details></div>
 <nav class="jump" aria-label="${L("Report sections", "報表章節")}">${

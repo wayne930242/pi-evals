@@ -10,6 +10,7 @@ import type { Coverage } from "./coverage.ts";
 import { DETECTORS, ERA_START } from "./detectors.ts";
 import { CHANGE_KIND_META, DETECTOR_META, METRICS, NOTICE_META } from "./meta.ts";
 import { staticOwner } from "./owners.ts";
+import { weeklyRises } from "./trends.ts";
 import { traceId } from "./schema.ts";
 
 export const SMALL_SAMPLE = 20;
@@ -260,6 +261,7 @@ export function buildModel(options: {
 	return {
 		v: 1 as const,
 		generated: now.toISOString(),
+		weekly: weeklyRises(index, filter.since ?? earliest, filter.project),
 		window: { since: filter.since ?? earliest ?? null, until: filter.until ?? days.at(-1) ?? null, days: days.length, project: filter.project ?? null },
 		freshness: { lastExtract: lastExtract ?? null, built: index.built, stale: ageHours > STALE_HOURS, ageHours: Number.isFinite(ageHours) ? round(ageHours, 1) : null },
 		meta: { metrics: METRICS, detectors: DETECTOR_META, notices: NOTICE_META, changeKinds: CHANGE_KIND_META },

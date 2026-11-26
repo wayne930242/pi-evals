@@ -14,6 +14,10 @@ export function recentDays(index: DaysIndex, project?: string) {
 }
 
 interface Count { errors: number; calls: number }
+export function trendPair(r: { before: Count; after: Count }) {
+	const side = (c: Count) => `${c.errors}/${c.calls} (${(100 * c.errors / c.calls).toFixed(1)}%)`;
+	return `${side(r.before)} → ${side(r.after)}`;
+}
 const zero = (): Count => ({ errors: 0, calls: 0 });
 function add(into: Count, from: Count) { into.errors += from.errors; into.calls += from.calls; }
 export function packageCounts(index: DaysIndex, day?: DayAgg) {

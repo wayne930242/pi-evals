@@ -1,10 +1,9 @@
 import { fileURLToPath } from "node:url";
-import type { DaysIndex } from "./build.ts";
 import type { ReportModel } from "./model.ts";
 import { overview, readings, value, verdict } from "./report/findings.ts";
 import { words } from "./report/format.ts";
 import { safeName } from "./schema.ts";
-import { weeklyRises } from "./trends.ts";
+import { trendPair } from "./trends.ts";
 
 export const scriptsDir = fileURLToPath(new URL("../scripts", import.meta.url));
 
@@ -15,7 +14,7 @@ function name(s: string) {
 	while (Buffer.byteLength(chars.join("")) > 69) chars.pop();
 	return chars.join("") + "…";
 }
-export function findings(m: ReportModel, index: DaysIndex) {
+export function findings(m: ReportModel) {
 	const { headline, trust, highlighted } = overview(m, "en"), L = words("en");
 	const lines = [
 		`${m.window.since ?? "?"}..${m.window.until ?? "?"} UTC${m.window.project ? ` · ${name(m.window.project)}` : ""} · ${m.freshness.stale ? "STALE: " : ""}last extract ${m.freshness.lastExtract ?? "never"} → coverage`,
@@ -36,13 +35,12 @@ export function findings(m: ReportModel, index: DaysIndex) {
 	const gate = !cov ? "not measured" : !cov.old.files ? "no old files" : cov.notIndexed.files || cov.notIndexed.bytes
 		? `blocked: ${cov.notIndexed.files}/${cov.old.files} old files not indexed` : `all ${cov.old.files} old files indexed`;
 	lines.push(`Cleanup (all projects/dates): ${gate} → coverage`);
-	const w = weeklyRises(index, m.window.since ?? undefined, m.window.project ?? undefined);
-	const pair = (r: { before: { errors: number; calls: number }; after: { errors: number; calls: number } }) => `${r.before.errors}/${r.before.calls} → ${r.after.errors}/${r.after.calls}`;
+	const w = m.weekly;
 	if (!w) lines.push("Need two weeks in range for error trends → packages / monitors");
 	else {
 		const p = w.packages[0];
-		lines.push(`${w.start}..${w.end} UTC, earlier week vs later: ${p ? `${p.name === "unknown" ? "tools with no known package" : name(p.name)} errors ${pair(p)}` : "no package rise flagged"} → packages`);
-		lines.push(`Same weeks: ${w.monitors ? `jobs ending in error ${pair(w.monitors)}` : "no job error rise flagged"} → monitors`);
+		lines.push(`${w.start}..${w.end} UTC, earlier week vs later: ${p ? `${p.name === "unknown" ? "tools with no known package" : name(p.name)} errors/calls ${trendPair(p)}` : "no package rise flagged"} → packages`);
+		lines.push(`Same weeks: ${w.monitors ? `failed/finished jobs ${trendPair(w.monitors)}` : "no job error rise flagged"} → monitors`);
 	}
 	for (const { line, prefix, metric } of extras) {
 		if (Buffer.byteLength(lines.join("\n") + metric) <= 1499) lines[line] = prefix + metric + lines[line].slice(prefix.length);

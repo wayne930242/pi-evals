@@ -2,7 +2,6 @@
 import { coverageInRange, indexedModel, reportPath } from "./ops.ts";
 import { findings } from "./findings.ts";
 import { select } from "./report/findings.ts";
-import { weeklyRises } from "./trends.ts";
 import type { Rate } from "./model.ts";
 
 export const VIEWS = ["findings", "skills", "packages", "ask_user", "monitors", "subagents", "process", "cost", "changes", "coverage"] as const;
@@ -42,7 +41,7 @@ export function query(view: View, options: { since?: string; days?: number; proj
 	const data = indexedModel(options, options.env, view === "findings");
 	if (!data) return "pi-evals: nothing extracted yet; the user can run /evals extract.";
 	const { report: m, index } = data;
-	if (view === "findings") return bound(findings(m, index), 1499);
+	if (view === "findings") return bound(findings(m), 1499);
 	const head = [
 		`pi-evals ${view} · ${m.window.since ?? "?"}..${m.window.until ?? "?"}${m.window.project ? ` · project ${m.window.project}` : ""} · sessions ${m.totals.sessions}`,
 		m.freshness.stale ? `STALE: last extract ${m.freshness.lastExtract ?? "never"} (${m.freshness.ageHours ?? "?"}h ago); /evals extract refreshes` : `last extract ${m.freshness.lastExtract}`,
@@ -54,7 +53,7 @@ export function query(view: View, options: { since?: string; days?: number; proj
 		body.push(`ways: ${Object.entries(m.skills.triggers).map(([k, v]) => `${k} ${v}`).join(", ")}`);
 		body.push(`offered but never loaded (${m.skills.neverLoaded.length}/${m.skills.offered}): ${m.skills.neverLoaded.slice(0, 25).join(", ")}`);
 	} else if (view === "packages") {
-		const w = weeklyRises(index, m.window.since ?? undefined, m.window.project ?? undefined);
+		const w = m.weekly;
 		for (const p of w?.packages.slice(0, 3) ?? []) body.push(`${p.name} weekly errors/calls: ${p.before.errors}/${p.before.calls} -> ${p.after.errors}/${p.after.calls}`);
 		body.push("package: calls, error rate, avg time");
 		for (const p of m.packages.slice(0, 15)) body.push(`${p.owner}${p.version ? `@${p.version}` : ""}: ${p.calls}, ${pct(p.errorRate)}, ${sec(p.avgMs)}`);
@@ -63,7 +62,7 @@ export function query(view: View, options: { since?: string; days?: number; proj
 		body.push(`questions ${a.calls}; dismissed ${pct(a.cancelRate)}; avg wait for answer ${sec(a.avgWaitMs)} (n=${a.waitN}); errors ${a.errors}`);
 		body.push(`answer source: ${Object.entries(a.sources).map(([k, v]) => `${k} ${v}`).join(", ") || "n/a"}`);
 	} else if (view === "monitors") {
-		const w = weeklyRises(index, m.window.since ?? undefined, m.window.project ?? undefined)?.monitors;
+		const w = m.weekly?.monitors;
 		if (w) body.push(`weekly jobs ending in error: ${w.before.errors}/${w.before.calls} -> ${w.after.errors}/${w.after.calls}`);
 		const mo = m.monitors;
 		body.push(`started ${mo.started}; ending recorded ${mo.finished}; avg duration ${sec(mo.avgMs)} (n=${mo.durationN})`);

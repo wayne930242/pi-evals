@@ -71,7 +71,9 @@ test("report defaults to 30 UTC dates, four linked pages agree with queries; cus
 
 test("compare full UTC weeks by project: include a 5-point rise, exclude low volume and the extraction day", () => {
 	const env = fixture(), text = query("findings", { env, project: "p" });
-	assert.match(text, /week-pkg.*0\/100.*5\/100.*→ packages/);
+	assert.match(text, /week-pkg errors\/calls 0\/100 \(0.0%\) → 5\/100 \(5.0%\).*→ packages/);
+	const html = renderHtml(model({ project: "p" }, env, false)!);
+	assert.match(html, /week-pkg 錯誤數\/呼叫數 0\/100 \(0.0%\) → 5\/100 \(5.0%\)/);
 	assert.match(query("findings", { env, days: 14, project: "p" }), /week-pkg/);
 	assert.doesNotMatch(query("findings", { env, days: 13, project: "p" }), /week-pkg/);
 	assert.doesNotMatch(text, /tiny-pkg/);
