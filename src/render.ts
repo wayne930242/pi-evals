@@ -152,10 +152,19 @@ ${table([L("anchorloop version", "anchorloop 版本"), L("Followed", "遵守"), 
 			const show = (x: Rate | number) => (typeof x === "number" ? num(x) : key === "cost_per_session" ? (x.value === null ? "—" : usd(x.value)) : key.endsWith("per_session") ? (x.value === null ? "—" : x.value.toFixed(2)) : pct(x));
 			return `<tr><td>${esc(label)}</td><td>${show(b)}</td><td>${show(a)}</td></tr>`;
 		};
-		const flags = [i.smallSample ? `<span class="warn">${tx(m.small_sample.label)}</span>` : "", i.confounded ? `<span class="warn">${tx(m.confounded.label)}: ${i.confounded}</span>` : ""].filter(Boolean).join(" · ");
+		const kinds = Object.entries(i.confounders)
+			.map(([k, v]) => `${tx(model.meta.changeKinds[k])} ${v}`)
+			.join(", ");
+		const flags = [
+			i.smallSample ? `<span class="warn">${tx(m.small_sample.label)}</span>` : "",
+			i.incomplete ? `<span class="warn">${tx(m.incomplete_window.label)} (${L("days with data", "有資料的天數")}: ${i.daysWithData.before} / ${i.daysWithData.after})</span>` : "",
+			i.confounded ? `<span class="warn">${tx(m.confounded.label)}: ${i.confounded} (${esc(kinds)})</span>` : "",
+		]
+			.filter(Boolean)
+			.join(" · ");
 		return `<table><thead><tr><th></th><th>${L("before", "之前")}</th><th>${L("after", "之後")}</th></tr></thead><tbody>${row("sessions", tx(m.sessions.label))}${row("tool_error_rate", tx(m.tool_error_rate.label))}${row("package_error_rate", L("This package's error rate", "此套件出錯比例"))}${row("ask_cancel_rate", tx(m.ask_cancel_rate.label))}${row("cost_per_session", tx(m.cost_per_session.label))}${row("skill_loads_per_session", tx(m.skill_loads_per_session.label))}${row("notices_per_session", tx(m.notices_per_session.label))}${row("anchor_before_first_edit", tx(dm.anchor_before_first_edit.label))}${row("check_after_last_edit", tx(dm.check_after_last_edit.label))}</tbody></table>${flags}`;
 	};
-	sections.push(`<section><h2>${L("Your changes and what followed", "你的變更與之後的變化")}</h2>${explain("impact")}${explain("small_sample")}${explain("confounded")}
+	sections.push(`<section><h2>${L("Your changes and what followed", "你的變更與之後的變化")}</h2>${explain("impact")}${explain("small_sample")}${explain("incomplete_window")}${explain("confounded")}
 ${changes.map((c) => `<details><summary>${esc(c.at.slice(0, 10))} · ${tx(model.meta.changeKinds[c.kind])} · ${esc(c.package ? `${c.package} ${c.from ?? "∅"} → ${c.to ?? "∅"}` : c.subject)}${c.repo ? ` <small>${esc(c.repo)} ${esc(c.sha ?? "")}</small>` : ""}</summary><p>${esc(c.subject)}</p>${imp(c)}</details>`).join("") || `<p class="empty">—</p>`}</section>`);
 
 	const lab = model.labels;

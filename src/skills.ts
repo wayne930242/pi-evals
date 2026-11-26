@@ -1,4 +1,7 @@
 /** Recognising skill loads, and listing the skills pi offers. */
+import { posix } from "node:path";
+
+const named = (name: string | undefined) => !!name && name !== "." && name !== "..";
 export interface SkillHit {
 	skill: string;
 	/** Skill-relative path of a file other than SKILL.md (a playbook, reference, script). */
@@ -8,11 +11,11 @@ export interface SkillHit {
 /** A read of `<dir>/SKILL.md` loads skill `<dir>`; a read under `skills/<name>/` reads one of its resources. */
 export function skillFromPath(path: unknown): SkillHit | undefined {
 	if (typeof path !== "string" || !path) return undefined;
-	const normal = path.replace(/\\/g, "/");
+	const normal = posix.normalize(path.replace(/\\/g, "/"));
 	const load = normal.match(/(?:^|\/)([^/]+)\/SKILL\.md$/);
-	if (load) return { skill: load[1] };
+	if (load) return named(load[1]) ? { skill: load[1] } : undefined;
 	const resource = normal.match(/(?:^|\/)skills\/([^/]+)\/(.+)$/);
-	if (resource && !resource[2].endsWith("/")) return { skill: resource[1], resource: resource[2] };
+	if (resource && named(resource[1]) && !resource[2].endsWith("/")) return { skill: resource[1], resource: resource[2] };
 	return undefined;
 }
 

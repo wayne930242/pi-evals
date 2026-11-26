@@ -11,6 +11,7 @@ import { projectKey } from "./project.ts";
 import { type Attrs, type EvalRecord, NAMES, record, type SkillTrigger, spanId, traceId } from "./schema.ts";
 import { skillFromPath, skillsFromBlocks, skillsFromCommand } from "./skills.ts";
 import { liveWriter } from "./store.ts";
+import { logicalIdOf } from "./extract/session.ts";
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
@@ -26,13 +27,11 @@ interface Pending {
 export interface ObserverOptions {
 	layout: Layout;
 	home: string;
-	env?: Record<string, string | undefined>;
 	now?: () => number;
 }
 
 export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 	const now = options.now ?? Date.now;
-	const env = options.env ?? process.env;
 	let sessionId = "";
 	let project = "unknown";
 	let trace: string | undefined;
@@ -114,6 +113,11 @@ export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 		remoteAnswers = new Set();
 		monitorStarts = new Map();
 		monitorsDone = new Set();
+		let file: string | undefined;
+		try {
+			file = ctx.sessionManager.getSessionFile?.();
+		} catch {}
+		const logicalId = file ? logicalIdOf(file) : undefined;
 		write = liveWriter(options.layout.events, (message) => {
 			try {
 				if (ctx.hasUI) ctx.ui.notify(message, "warning");
@@ -125,7 +129,8 @@ export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 			kind: "event",
 			ts: iso(now()),
 			source: "live",
-			attrs: { ...base(), "pi.session.kind": env.PI_SUBAGENT_ID ? "subagent" : "interactive", "pi.subagent.logical_id": env.PI_SUBAGENT_ID },
+			// The session file name marks a subagent; PI_SUBAGENT_ID is inherited by anything a subagent starts, so it is not used.
+			attrs: { ...base(), "pi.session.kind": logicalId ? "subagent" : "interactive", "pi.subagent.logical_id": logicalId },
 		});
 		const on = (channel: string, handler: (data: unknown) => void) => {
 			try {
@@ -143,9 +148,11 @@ export function observe(pi: ExtensionAPI, options: ObserverOptions): void {
 		on("monitor:finished", (data) => monitorEnd(data, "finished"));
 		on("monitor:done", (data) => monitorEnd(data, "completed"));
 		on("monitor:error", (data) => monitorEnd(data, "error"));
-		on("rpiv:ask-user:answer", (data) => {
-			const id = str(obj(data).toolCallId);
-			if (id) remoteAnswers.add(id);
+		// A remote answer (e.g. from a phone) is reported by the answer channel's result; a rejected one is not the answer.
+		on("rpiv:ask-user:answer-result", (data) => {
+			const d = obj(data);
+			const id = str(d.toolCallId);
+			if (id && d.ok === true) remoteAnswers.add(id);
 		});
 	});
 

@@ -124,3 +124,9 @@ test("out-of-scope sessions do not add to the per-day detector counts", () => {
 	const { summary } = read("/s/a.jsonl", sessionLines(richSession(HOME, "s-old2", "2026-10-02T10:00:00.000Z")));
 	assert.deepEqual(summary.days["2026-10-02"].detectors, {});
 });
+
+test("F009: a skill path is normalised before it is named", async () => {
+	const { skillFromPath } = await import("../src/skills.ts");
+	assert.deepEqual(skillFromPath("/x/skills/../SKILL.md"), { skill: "x" });
+	assert.equal(skillFromPath("../SKILL.md"), undefined);
+});

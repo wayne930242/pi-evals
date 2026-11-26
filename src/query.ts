@@ -71,12 +71,12 @@ export function query(view: View, options: { since?: string; project?: string; e
 		body.push("cost of sessions loading skill (not caused by it):");
 		for (const s of m.cost.bySkill.slice(0, 10)) body.push(`${s.skill}: $${s.cost} over ${s.sessions} sessions`);
 	} else if (view === "changes") {
-		body.push("newest changes, metric before -> after (window days each side); flags: small = <20 sessions a side, confounded = other changes nearby");
+		body.push("newest changes, sessions split at the change time, metric before -> after; flags: small = <20 sessions a side, incomplete = a window runs past the data, confounded = other commits nearby");
 		for (const c of m.changes.slice(-8).reverse()) {
 			const what = c.package ? `${c.package} ${c.from ?? "-"}->${c.to ?? "-"}` : c.subject.slice(0, 60);
 			const i = c.impact;
 			const fx = i
-				? `sessions ${i.before.sessions}->${i.after.sessions}, tool errors ${pct(i.before.tool_error_rate)}->${pct(i.after.tool_error_rate)}, anchor-first ${pct(i.before.anchor_before_first_edit)}->${pct(i.after.anchor_before_first_edit)}${i.smallSample ? ", small" : ""}${i.confounded ? `, confounded ${i.confounded}` : ""}`
+				? `sessions ${i.before.sessions}->${i.after.sessions}, tool errors ${pct(i.before.tool_error_rate)}->${pct(i.after.tool_error_rate)}, anchor-first ${pct(i.before.anchor_before_first_edit)}->${pct(i.after.anchor_before_first_edit)}${i.smallSample ? ", small" : ""}${i.incomplete ? `, incomplete (days with data ${i.daysWithData.before}/${i.daysWithData.after})` : ""}${i.confounded ? `, confounded ${i.confounded}` : ""}`
 				: "no data before";
 			body.push(`${c.at.slice(0, 10)} ${c.kind} ${what}: ${fx}`);
 		}

@@ -39,7 +39,15 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 	const spawnFn = options.spawnExtract ?? spawn;
 	return function evals(pi: ExtensionAPI): void {
 		const ctx0 = context(env);
-		observe(pi, { layout: ctx0.layout, home: ctx0.home, env, now: options.now });
+		observe(pi, { layout: ctx0.layout, home: ctx0.home, now: options.now });
+		let settingsWarned = false;
+		pi.on("session_start", (_event, ctx) => {
+			if (settingsWarned || !ctx0.settings.error) return;
+			settingsWarned = true;
+			try {
+				if (ctx.hasUI) ctx.ui.notify(`pi-evals settings: ${ctx0.settings.error}`, "warning");
+			} catch {}
+		});
 		let running: Promise<void> | undefined;
 
 		const extractInChild = (ctx: ExtensionCommandContext): Promise<void> => {

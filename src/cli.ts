@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Thin CLI over the same operations as `/evals`. */
-import { mark, runExtract, runReport, statusText } from "./ops.ts";
+import { context, mark, runExtract, runReport, statusText } from "./ops.ts";
 import { query, type View, VIEWS } from "./query.ts";
 
 const USAGE = `usage:
@@ -21,6 +21,8 @@ function flags(args: string[], name: string): string[] {
 
 async function main(argv: string[]): Promise<number> {
 	const [cmd, ...args] = argv;
+	const settingsError = context().settings.error;
+	if (settingsError) process.stderr.write(`pi-evals settings: ${settingsError}\n`);
 	if (cmd === "extract") {
 		const json = args.includes("--json");
 		const workers = flag(args, "--workers");

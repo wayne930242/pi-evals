@@ -45,12 +45,22 @@ export function defaultSettings(env: Env = process.env): Settings {
 
 const expand = (path: string, env: Env) => (path === "~" || path.startsWith("~/") ? join(home(env), path.slice(1)) : resolve(path));
 
-/** Settings file merged over the defaults; `PI_EVALS_ROOTS` (path-list) adds roots. A broken file is reported, not ignored. */
-export function loadSettings(env: Env = process.env): Settings {
-	const settings = defaultSettings(env);
+/**
+ * Settings file merged over the defaults; `PI_EVALS_ROOTS` (path-list) adds roots. A file that cannot be read or parsed
+ * yields the defaults and an `error` the caller shows, so a typo never stops the observer from loading.
+ */
+export function loadSettings(env: Env = process.env): Settings & { error?: string } {
+	const settings: Settings & { error?: string } = defaultSettings(env);
 	const file = settingsFile(env);
+	let raw: Partial<Settings> | undefined;
 	if (existsSync(file)) {
-		const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<Settings>;
+		try {
+			raw = JSON.parse(readFileSync(file, "utf8")) as Partial<Settings>;
+		} catch (error) {
+			settings.error = `${file}: ${error instanceof Error ? error.message : String(error)}; using defaults`;
+		}
+	}
+	if (raw) {
 		if (Array.isArray(raw.extraRoots)) settings.extraRoots = raw.extraRoots.map((p) => expand(String(p), env));
 		if (Array.isArray(raw.changeRepos)) settings.changeRepos = raw.changeRepos.map((p) => expand(String(p), env));
 		if (typeof raw.coverageDays === "number" && raw.coverageDays > 0) settings.coverageDays = raw.coverageDays;
@@ -68,6 +78,7 @@ export interface Layout {
 	records: string;
 	checkpoint: string;
 	days: string;
+	sessionRows: string;
 	sessionEvals: string;
 	changes: string;
 	marks: string;
@@ -83,6 +94,7 @@ export function layout(state = stateDir()): Layout {
 		records: join(state, "index", "records"),
 		checkpoint: join(state, "index", "checkpoint.json"),
 		days: join(state, "index", "days.json"),
+		sessionRows: join(state, "index", "sessions.json"),
 		sessionEvals: join(state, "index", "session-evals.json"),
 		changes: join(state, "changes.jsonl"),
 		marks: join(state, "marks.jsonl"),

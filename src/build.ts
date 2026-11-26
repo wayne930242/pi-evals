@@ -6,8 +6,8 @@
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { addLabel, bucketOf, bump, type DayAgg, emptyDay, mergeDay, type SessionSummary } from "./aggregate.ts";
-import { buildChanges, type Change, versionOn, writeChanges } from "./changes.ts";
+import { addLabel, bucketOf, bump, type DayAgg, emptyDay, mergeDay, rowOf, type SessionRow, type SessionSummary } from "./aggregate.ts";
+import { buildChanges, type Change, versionAt, writeChanges } from "./changes.ts";
 import type { Checkpoint } from "./extract/run.ts";
 import { dayOf, type Layout, type Settings } from "./paths.ts";
 import { type EvalRecord, NAMES } from "./schema.ts";
@@ -24,8 +24,8 @@ export interface DaysIndex {
 	/** Skills pi offered in the newest sessions (union of catalogs seen in the last 7 days of data, and live snapshots). */
 	offeredSkills: string[];
 	sessions: { backfill: number; live: number; both: number; subagent: number; linked: number };
-	/** anchorloop version in effect per day, where the pin history knows it. */
-	anchorloopVersions: Record<string, string>;
+	/** First and last session start in the index, and the last extract: the range the data covers. */
+	range: { start: string; end: string };
 }
 
 export const ANCHORLOOP_PACKAGES = ["pi-anchorloop", "pi-aaaav", "aaaav"];
@@ -153,10 +153,12 @@ export function subagentLinks(summaries: SessionSummary[], ledgerDir: string): M
 export function buildIndex(options: { layout: Layout; settings: Settings; checkpoint: Checkpoint; agentDir: string; now?: () => Date }): {
 	index: DaysIndex;
 	changes: Change[];
+	errors: string[];
 } {
 	const { layout, checkpoint } = options;
 	const { bySession, snapshots } = liveSessions(layout);
-	const changes = buildChanges(options.settings.changeRepos, snapshots, layout.marks);
+	const errors: string[] = [];
+	const changes = buildChanges(options.settings.changeRepos, snapshots, layout.marks, errors);
 	writeChanges(layout.changes, changes);
 
 	const summaries = Object.values(checkpoint.files).map((f) => f.summary);
@@ -168,8 +170,8 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 			byProject[project] = mergeDay(byProject[project] ?? emptyDay(), agg);
 		}
 	};
-	const versions: Record<string, string> = {};
-	const versionFor = (day: string) => (versions[day] ??= versionOn(changes, ANCHORLOOP_PACKAGES, day) ?? "unknown");
+	const versionFor = (start: string) => versionAt(changes, ANCHORLOOP_PACKAGES, start) ?? "unknown";
+	const rows: SessionRow[] = [];
 	const sessionEvals: Record<string, Record<string, string>> = {};
 	const seen = new Set<string>();
 	let both = 0;
@@ -189,7 +191,7 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 			if (link || s.parentId) linked += 1;
 			bump(first.subagentCost, link?.role ?? (s.parentId ? "role-unknown" : "unlinked"), s.cost);
 		}
-		const version = versionFor(startDay);
+		const version = versionFor(s.start);
 		const labels: Record<string, string> = {};
 		for (const [name, result] of Object.entries(s.evals)) {
 			if (!result || result.explanation === "out_of_scope_pre_3.0") continue;
@@ -198,6 +200,7 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 		}
 		if (Object.keys(labels).length) sessionEvals[s.sessionId] = labels;
 		add(s.project, days);
+		rows.push(rowOf(s.start, s.project, s.kind === "subagent", s.cost, days, s.evals));
 	}
 	let liveOnly = 0;
 	for (const [id, records] of bySession) {
@@ -205,6 +208,7 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 		liveOnly += 1;
 		const summary = liveSummary(records);
 		add(summary.project, summary.days);
+		rows.push(rowOf(summary.start, summary.project, records.some((r) => r.name === NAMES.session && r.attrs["pi.session.kind"] === "subagent"), 0, summary.days));
 	}
 
 	const owners: DaysIndex["owners"] = {};
@@ -221,6 +225,7 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 
 	const allDays = Object.keys(cube).sort();
 	const lastDay = allDays.at(-1) ?? "";
+	rows.sort((a, b) => a.s.localeCompare(b.s));
 	const cutoff = lastDay ? dayOf(Date.parse(lastDay) - 7 * 86_400_000) : "";
 	const offered = new Set<string>();
 	for (const cat of Object.values(checkpoint.catalogs)) if (cat.last.slice(0, 10) >= cutoff) for (const n of cat.names) offered.add(n);
@@ -234,11 +239,16 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 		owners,
 		offeredSkills: [...offered].sort(),
 		sessions: { backfill: seen.size, live: liveOnly, both, subagent, linked },
-		anchorloopVersions: Object.fromEntries(allDays.map((d) => [d, versionFor(d)])),
+		range: { start: rows[0]?.s ?? "", end: checkpoint.lastExtract ?? rows.at(-1)?.s ?? "" },
 	};
 	atomicWrite(layout.days, JSON.stringify(index));
+	atomicWrite(layout.sessionRows, JSON.stringify(rows));
 	atomicWrite(layout.sessionEvals, JSON.stringify(sessionEvals));
-	return { index, changes };
+	return { index, changes, errors };
+}
+
+export function loadRows(layout: Layout): SessionRow[] {
+	return existsSync(layout.sessionRows) ? (JSON.parse(readFileSync(layout.sessionRows, "utf8")) as SessionRow[]) : [];
 }
 
 export function loadIndex(layout: Layout): DaysIndex | undefined {

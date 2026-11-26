@@ -131,9 +131,19 @@ export function addMark(file: string, text: string, at = new Date()): Change {
 	return { at: at.toISOString(), kind: "manual", subject: text, source: "mark" };
 }
 
-/** All changes, oldest first; a live version change already pinned in git within three days before is dropped. */
-export function buildChanges(repos: string[], snapshots: EvalRecord[], marksFile: string): Change[] {
-	const fromGit = repos.flatMap(gitChanges);
+/**
+ * All changes, oldest first; a live version change already pinned in git within three days before is dropped.
+ * A repository whose history cannot be read is reported through `errors` and skipped.
+ */
+export function buildChanges(repos: string[], snapshots: EvalRecord[], marksFile: string, errors: string[] = []): Change[] {
+	const fromGit = repos.flatMap((repo) => {
+		try {
+			return gitChanges(repo);
+		} catch (error) {
+			errors.push(error instanceof Error ? error.message : String(error));
+			return [];
+		}
+	});
 	const live = liveChanges(snapshots).filter(
 		(c) => !fromGit.some((g) => g.kind === "pin" && g.package === c.package && g.to === c.to && Date.parse(c.at) - Date.parse(g.at) < 3 * 86_400_000 && Date.parse(c.at) >= Date.parse(g.at)),
 	);
@@ -155,13 +165,13 @@ export function readChanges(file: string): Change[] {
 		.map((line) => JSON.parse(line) as Change);
 }
 
-/** The version of a package in effect on a day, from pin changes (oldest first). */
-export function versionOn(changes: Change[], pkg: string | string[], day: string): string | undefined {
+/** The version of a package in effect at an ISO time: the newest pin change at or before it (changes oldest first). */
+export function versionAt(changes: Change[], pkg: string | string[], at: string): string | undefined {
 	const names = Array.isArray(pkg) ? pkg : [pkg];
 	let version: string | undefined;
 	for (const c of changes) {
 		if (c.kind !== "pin" || !c.package || !names.includes(c.package)) continue;
-		if (c.at.slice(0, 10) > day) break;
+		if (c.at > at) break;
 		version = c.to ?? version;
 	}
 	return version;

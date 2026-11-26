@@ -158,3 +158,47 @@ export interface SessionSummary {
 	catalog?: string;
 	days: Record<string, DayAgg>;
 }
+
+/**
+ * One session in a few numbers, keyed to its start time: what the before/after comparison of a change and the
+ * version split read, so a change at 16:00 splits a day's sessions at 16:00 rather than at midnight.
+ */
+export interface SessionRow {
+	/** Start, ISO. */
+	s: string;
+	p: string;
+	/** 1 for a subagent session. */
+	k: 0 | 1;
+	/** Model cost, USD. */
+	c: number;
+	/** Tool → [calls, errors]. */
+	t: Record<string, [number, number]>;
+	/** Ask-user calls and dismissals. */
+	ac: number;
+	ax: number;
+	/** Skill loads and close-guard notices. */
+	sl: number;
+	nt: number;
+	/** Detector → 1 pass, 0 fail (in scope and applicable only). */
+	ev: Record<string, 0 | 1>;
+}
+
+export function rowOf(start: string, project: string, subagent: boolean, cost: number, days: Record<string, DayAgg>, evals: Record<string, { label: Label } | undefined> = {}): SessionRow {
+	const row: SessionRow = { s: start, p: project, k: subagent ? 1 : 0, c: Math.round(cost * 1e4) / 1e4, t: {}, ac: 0, ax: 0, sl: 0, nt: 0, ev: {} };
+	for (const day of Object.values(days)) {
+		for (const [tool, t] of Object.entries(day.tools)) {
+			const cell = (row.t[tool] ??= [0, 0]);
+			cell[0] += t.calls;
+			cell[1] += t.errors;
+		}
+		row.ac += day.ask.calls;
+		row.ax += day.ask.cancelled;
+		row.sl += Object.values(day.skills).reduce((s, v) => s + v, 0);
+		row.nt += Object.values(day.notices).reduce((s, v) => s + v, 0);
+	}
+	for (const [name, result] of Object.entries(evals)) {
+		if (result?.label === "pass") row.ev[name] = 1;
+		else if (result?.label === "fail") row.ev[name] = 0;
+	}
+	return row;
+}

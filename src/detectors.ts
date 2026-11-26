@@ -13,8 +13,11 @@
  */
 import type { Label } from "./schema.ts";
 
-/** anchorloop 3.0.0 (one anchor rule and the close guard) shipped on this UTC day; older sessions are out of scope. */
-export const ERA_START = "2026-11-23";
+/**
+ * anchorloop 3.0.0 (one anchor rule and the close guard) reached this setup when weihung-basic-agent pinned it
+ * (commit 9f72366, 2026-11-23T10:51:07Z). Sessions that started earlier are out of scope.
+ */
+export const ERA_START = "2026-11-23T10:51:07.000Z";
 export const DETECTORS = ["anchor_before_first_edit", "check_after_last_edit", "todo_evidence", "close_guard_quiet"] as const;
 export type DetectorName = (typeof DETECTORS)[number];
 export interface DetectorResult {

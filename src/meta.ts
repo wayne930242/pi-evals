@@ -177,7 +177,7 @@ export const METRICS: Record<string, MetricMeta> = {
 		label: t("Before and after a change", "變更前後比較"),
 		meaning: t("The same numbers in the days before and after one of your changes; a difference hints at an effect but does not prove it.", "你做某項變更前後幾天的同一組數字；有差異只是提示可能有影響，不能證明。"),
 		goodDirection: "none",
-		howComputed: t("Each number is computed over the days before the change and the days after, with how many sessions each side had.", "每個數字分別用變更前與變更後的天數計算，並附上兩邊各有幾個工作階段。"),
+		howComputed: t("Sessions are split by when they started: before the change's time or after it, within the same number of days on each side.", "依工作階段開始的時間分成變更時間之前與之後，兩邊取相同天數。"),
 	},
 	small_sample: {
 		label: t("Too few sessions to read", "工作階段太少，不宜解讀"),
@@ -189,7 +189,13 @@ export const METRICS: Record<string, MetricMeta> = {
 		label: t("Other changes nearby", "附近還有其他變更"),
 		meaning: t("Other changes happened in the same days, so a difference cannot be credited to this one alone.", "同一段時間還有別的變更，差異不能只算在這一項。"),
 		goodDirection: "none",
-		howComputed: t("Count of other changes (not from the same commit) inside either window.", "兩邊期間內其他變更（不同提交）的數量。"),
+		howComputed: t("Other commits and notes inside either window, counted once each and grouped by what they changed.", "兩邊期間內的其他提交與手動標記，每筆算一次，並依變更種類分組。"),
+	},
+	incomplete_window: {
+		label: t("Window reaches past the data", "比較期間超出資料範圍"),
+		meaning: t("One side covers days with no data yet (or before the first session), so its numbers cover fewer days than the other side.", "其中一邊包含還沒有資料（或早於第一個工作階段）的日子，所以它涵蓋的天數比另一邊少。"),
+		goodDirection: "none",
+		howComputed: t("Set when the window before starts before the first session or the window after ends after the last extract; the days with data on each side are shown.", "變更前的期間早於第一個工作階段、或變更後的期間晚於上次抽取時標記；並列出兩邊各有資料的天數。"),
 	},
 };
 

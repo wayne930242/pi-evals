@@ -13,19 +13,19 @@ import { richSession, SECRET, writeAgentDir } from "./fixtures.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
-function setup(options: { eventsAsFile?: boolean } = {}) {
+function setup(options: { eventsAsFile?: boolean; settings?: string; extraEnv?: Record<string, string> } = {}) {
 	const home = mkdtempSync(join(tmpdir(), "pi-evals-ext-"));
 	setKnownProjects(["demo-repo"]);
 	const state = join(home, "state");
 	const config = join(home, "config");
 	mkdirSync(join(config, "pi-evals"), { recursive: true });
-	writeFileSync(join(config, "pi-evals", "settings.json"), JSON.stringify({ changeRepos: [] }));
+	writeFileSync(join(config, "pi-evals", "settings.json"), options.settings ?? JSON.stringify({ changeRepos: [] }));
 	if (options.eventsAsFile) {
 		mkdirSync(state, { recursive: true });
 		writeFileSync(join(state, "events"), "not a dir");
 	}
 	const agentDir = writeAgentDir([{ dir: "--demo--", file: "2026-11-24T10-00-00-000Z_01a20000-0000-7000-8000-000000000001.jsonl", spec: richSession(home) }]);
-	const env = { HOME: home, PI_CODING_AGENT_DIR: agentDir, PI_EVALS_STATE_DIR: state, XDG_CONFIG_HOME: config };
+	const env = { HOME: home, PI_CODING_AGENT_DIR: agentDir, PI_EVALS_STATE_DIR: state, XDG_CONFIG_HOME: config, ...options.extraEnv };
 	const handlers = new Map<string, Handler[]>();
 	const bus = new EventEmitter();
 	const notes: { text: string; level: string }[] = [];
@@ -77,7 +77,7 @@ const eventsOf = (state: string) =>
 		.map((l) => JSON.parse(l));
 
 test("the observer records tool owners, finished tool calls, skill loads, monitors, and the ask-user answer source", async () => {
-	const h = setup();
+	const h = setup({ extraEnv: { PI_SUBAGENT_ID: "inherited" } });
 	await h.fire("session_start", { reason: "startup" });
 	await h.fire("before_agent_start", { messageType: "user", systemPromptOptions: { skills: [{ name: "coding", filePath: "/x/coding/SKILL.md" }] } });
 	await h.fire("input", { text: "/skill:inspecting please" });
@@ -85,8 +85,13 @@ test("the observer records tool owners, finished tool calls, skill loads, monito
 	await h.fire("tool_execution_end", { toolCallId: "t1", toolName: "read", result: { content: [{ type: "text", text: SECRET }] }, isError: false, durationMs: 5 });
 	await h.fire("tool_execution_start", { toolCallId: "t2", toolName: "ask_user_question", args: { questions: [{ question: SECRET }] } });
 	h.bus.emit("rpiv:ask-user:answer", { toolCallId: "t2", answers: [SECRET] });
+	h.bus.emit("rpiv:ask-user:answer-result", { ok: true, toolCallId: "t2", requestId: "r1" });
 	await h.fire("tool_execution_end", { toolCallId: "t2", toolName: "ask_user_question", result: { details: { cancelled: false, answers: [{ answer: SECRET }] } }, isError: false, durationMs: 9000 });
 	await h.fire("tool_execution_end", { toolCallId: "t3", toolName: "bash", result: {}, isError: true });
+	await h.fire("tool_execution_start", { toolCallId: "t4", toolName: "ask_user_question", args: { questions: [{}] } });
+	h.bus.emit("rpiv:ask-user:answer", { toolCallId: "t4", answers: ["x"] });
+	h.bus.emit("rpiv:ask-user:answer-result", { ok: false, code: "stale", toolCallId: "t4" });
+	await h.fire("tool_execution_end", { toolCallId: "t4", toolName: "ask_user_question", result: { details: { cancelled: false } }, isError: false, durationMs: 100 });
 	h.bus.emit("monitor:started", { monitorId: "7", command: SECRET, timestamp: h.now() - 4000 });
 	h.bus.emit("monitor:finished", { monitorId: "7", status: "completed", exitCode: 0, outputLines: 3 });
 	h.bus.emit("monitor:done", { monitorId: "7", exitCode: 0 });
@@ -99,7 +104,9 @@ test("the observer records tool owners, finished tool calls, skill loads, monito
 	assert.deepEqual(by("pi.skills.available")[0].attrs["pi.skills"], ["coding"]);
 	assert.deepEqual(by("pi.skill.load").map((r) => [r.attrs["gen_ai.skill.name"], r.attrs["pi.skill.trigger"]]), [["inspecting", "slash"], ["coding", "read"], ["agent-terse", "declared"]]);
 	const tools = by("execute_tool");
-	assert.equal(tools.length, 3);
+	assert.equal(tools.length, 4);
+	assert.equal(tools[3].attrs["pi.ask_user.source"], "terminal", "a rejected remote answer is not the answer's source");
+	assert.equal(by("pi.session")[0].attrs["pi.session.kind"], "interactive", "an inherited PI_SUBAGENT_ID does not make a subagent");
 	assert.equal(tools[1].attrs["pi.tool.owner"], "@juicesharp/rpiv-ask-user-question");
 	assert.equal(tools[1].attrs["pi.tool.owner_version"], "2.15.0");
 	assert.equal(tools[1].attrs["pi.ask_user.source"], "remote");
@@ -111,6 +118,22 @@ test("the observer records tool owners, finished tool calls, skill loads, monito
 	assert.equal(monitors[0].attrs["pi.monitor.status"], "completed");
 	assert.ok(monitors[0].duration_ms >= 4000);
 	assert.ok(!readFileSync(join(h.state, "events", "2026-11-26.jsonl"), "utf8").includes("PLANTED"));
+});
+
+test("a broken settings file loads with defaults and says so once", async () => {
+	const h = setup({ settings: "{ not json" });
+	await h.fire("session_start", {});
+	await h.fire("session_start", {});
+	assert.equal(h.notes.filter((n) => n.text.includes("settings")).length, 1);
+	await h.command().handler("status", h.ctx);
+	assert.match(h.notes.at(-1)?.text ?? "", /settings: .*using defaults/);
+});
+
+test("a change repository that is not a git repository is reported, and the extract still finishes", async () => {
+	const h = setup({ settings: JSON.stringify({ changeRepos: [tmpdir()] }) });
+	const status = await runExtract({ env: h.env, workers: 0 });
+	assert.equal(status.sessions.backfill, 1);
+	assert.match(readFileSync(join(h.state, "index", "status.json"), "utf8"), /git log/);
 });
 
 test("a failing write warns once and never throws into the turn", async () => {

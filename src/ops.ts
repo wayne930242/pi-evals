@@ -1,7 +1,7 @@
 /** The operations behind `/evals`, `evals_query`, and the CLI. */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { buildIndex, loadIndex } from "./build.ts";
+import { buildIndex, loadIndex, loadRows } from "./build.ts";
 import { addMark, readChanges } from "./changes.ts";
 import { coverage } from "./coverage.ts";
 import { extract, loadCheckpoint, type Progress } from "./extract/run.ts";
@@ -30,7 +30,7 @@ export async function runExtract(options: { env?: Env; onProgress?: Progress; si
 	const ctx = context(options.env);
 	const roots = [...ctx.roots, ...(options.extraRoots ?? []).map((r) => resolve(r))];
 	const { stats, checkpoint } = await extract({ roots, layout: ctx.layout, home: ctx.home, workers: options.workers, onProgress: options.onProgress, signal: options.signal });
-	const { index, changes } = buildIndex({ layout: ctx.layout, settings: ctx.settings, checkpoint, agentDir: ctx.agentDir });
+	const { index, changes, errors } = buildIndex({ layout: ctx.layout, settings: ctx.settings, checkpoint, agentDir: ctx.agentDir });
 	const status: StatusFile = {
 		lastExtract: checkpoint.lastExtract ?? new Date().toISOString(),
 		stats: { ...stats, mbPerSec: stats.ms ? Math.round((stats.bytes / 1e6 / (stats.ms / 1000)) * 10) / 10 : 0 },
@@ -38,7 +38,7 @@ export async function runExtract(options: { env?: Env; onProgress?: Progress; si
 		changes: changes.length,
 	};
 	mkdirSync(join(ctx.layout.state, "index"), { recursive: true });
-	writeFileSync(ctx.layout.status, JSON.stringify({ ...status, errors: stats.errors }, null, 2));
+	writeFileSync(ctx.layout.status, JSON.stringify({ ...status, errors: [...stats.errors, ...errors] }, null, 2));
 	return status;
 }
 
@@ -58,6 +58,7 @@ export function model(filter: Filter, env?: Env, withCoverage = true) {
 	if (!index) return undefined;
 	return buildModel({
 		index,
+		rows: loadRows(ctx.layout),
 		changes: readChanges(ctx.layout.changes),
 		filter,
 		windowDays: ctx.settings.impactWindowDays,
@@ -103,6 +104,7 @@ export function statusText(env?: Env): string {
 		`coverage (inactive > ${cov.cutDays} days): ${cov.indexed.files}/${cov.old.files} indexed (${gb(cov.indexed.bytes)} of ${gb(cov.old.bytes)}); not indexed ${cov.notIndexed.files} (${gb(cov.notIndexed.bytes)}); all files ${cov.all.indexedFiles}/${cov.all.files} indexed`,
 		`report: ${existsSync(reportPath(env)) ? reportPath(env) : "not built (run /evals report)"}`,
 		`state: ${ctx.layout.state}`,
+		ctx.settings.error ? `settings: ${ctx.settings.error}` : "",
 	];
 	return lines.filter(Boolean).join("\n");
 }

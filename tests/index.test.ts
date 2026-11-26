@@ -3,7 +3,7 @@ import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { emptyDay } from "../src/aggregate.ts";
+import { emptyDay, type SessionRow } from "../src/aggregate.ts";
 import { type DaysIndex, liveSummary, overlayLive } from "../src/build.ts";
 import type { Change } from "../src/changes.ts";
 import { coverage } from "../src/coverage.ts";
@@ -13,33 +13,41 @@ import { layout } from "../src/paths.ts";
 import { record } from "../src/schema.ts";
 import { richSession, sessionLines, writeAgentDir } from "./fixtures.ts";
 
-function index(days: Record<string, number>): DaysIndex {
+/** An index and its session rows: `sessions` sessions per day, each starting at noon with 10 bash calls and 1 error. */
+function index(days: Record<string, number>): { idx: DaysIndex; rows: SessionRow[] } {
 	const cube: DaysIndex["days"] = {};
+	const rows: SessionRow[] = [];
 	for (const [day, sessions] of Object.entries(days)) {
 		const agg = emptyDay();
 		agg.sessions = sessions;
 		agg.tools.bash = { calls: sessions * 10, errors: sessions, durSum: 0, durN: 0 };
 		cube[day] = { p: agg };
+		for (let i = 0; i < sessions; i++) rows.push({ s: `${day}T12:00:00.000Z`, p: "p", k: 0, c: 0, t: { bash: [10, 1] }, ac: 0, ax: 0, sl: 0, nt: 0, ev: {} });
 	}
-	return { v: 1, built: "2026-11-26T00:00:00.000Z", lastExtract: "2026-11-26T00:00:00.000Z", days: cube, owners: {}, offeredSkills: [], sessions: { backfill: 0, live: 0, both: 0, subagent: 0, linked: 0 }, anchorloopVersions: {} };
+	const first = Object.keys(days).sort()[0];
+	const idx: DaysIndex = { v: 1, built: "2026-11-26T00:00:00.000Z", lastExtract: "2026-11-26T00:00:00.000Z", days: cube, owners: {}, offeredSkills: [], sessions: { backfill: 0, live: 0, both: 0, subagent: 0, linked: 0 }, range: { start: `${first}T12:00:00.000Z`, end: "2026-11-26T00:00:00.000Z" } };
+	return { idx, rows };
 }
 
-const model = (idx: DaysIndex, changes: Change[], labels = "/nonexistent", evals = "/nonexistent") =>
-	buildModel({ index: idx, changes, filter: {}, windowDays: 3, labelsFile: labels, sessionEvalsFile: evals, now: new Date("2026-11-26T01:00:00.000Z") });
+const model = (data: { idx: DaysIndex; rows: SessionRow[] }, changes: Change[], labels = "/nonexistent", evals = "/nonexistent") =>
+	buildModel({ index: data.idx, rows: data.rows, changes, filter: {}, windowDays: 3, labelsFile: labels, sessionEvalsFile: evals, now: new Date("2026-11-26T01:00:00.000Z") });
 
 test("a change compares the days before and after, flags small samples and nearby changes", () => {
-	const idx = index({ "2026-11-17": 30, "2026-11-18": 30, "2026-11-19": 30, "2026-11-20": 5, "2026-11-21": 5, "2026-11-22": 5 });
+	const data = index({ "2026-11-16": 1, "2026-11-17": 30, "2026-11-18": 30, "2026-11-19": 30, "2026-11-20": 5, "2026-11-21": 5, "2026-11-22": 5 });
 	const change: Change = { at: "2026-11-20T08:00:00.000Z", kind: "pin", subject: "bump", package: "pi-x", from: "1", to: "2", source: "git", sha: "a" };
 	const near: Change = { at: "2026-11-21T08:00:00.000Z", kind: "rule", subject: "rule", source: "git", sha: "b" };
 	const same: Change = { at: "2026-11-20T08:00:00.000Z", kind: "rule", subject: "same commit", source: "git", sha: "a" };
-	const m = model(idx, [change, near, same]);
+	const m = model(data, [change, near, same]);
 	const c = m.changes.find((x) => x.subject === "bump");
 	assert.equal(c?.impact?.before.sessions, 90);
 	assert.equal(c?.impact?.after.sessions, 15);
 	assert.equal(c?.impact?.smallSample, true);
 	assert.equal(c?.impact?.confounded, 1, "the same commit does not confound itself");
+	assert.deepEqual(c?.impact?.confounders, { rule: 1 });
 	assert.equal(c?.impact?.before.tool_error_rate.value, 0.1);
-	assert.equal(m.changes.find((x) => x.subject === "bump")?.impact?.window.before.since, "2026-11-17");
+	assert.equal(c?.impact?.window.before.since, "2026-11-17T08:00:00.000Z");
+	assert.equal(c?.impact?.incomplete, false);
+	assert.deepEqual(c?.impact?.daysWithData, { before: 3, after: 3 });
 });
 
 test("every metric and detector carries plain-language metadata in both languages", () => {
@@ -110,4 +118,25 @@ test("extract is incremental and coverage counts old files by whether the index 
 	assert.equal(cov.notIndexed.files, 1, "a file changed since extraction is not covered");
 	const third = await extract({ roots, layout: lay, home, workers: 2 });
 	assert.equal(third.stats.changed, 1);
+});
+
+test("F001: impact and version follow the session start against the change time, not the calendar day", async () => {
+	const { impactFromRows } = await import("../src/model.ts");
+	const { versionAt } = await import("../src/changes.ts");
+	const row = (s: string, ok: boolean) => ({ s, p: "p", k: 0 as const, c: 1, t: { bash: [10, ok ? 0 : 5] as [number, number] }, ac: 0, ax: 0, sl: 0, nt: 0, ev: { anchor_before_first_edit: ok ? 1 : 0 } as Record<string, 0 | 1> });
+	const rows = [row("2026-11-25T10:00:00.000Z", false), row("2026-11-25T20:00:00.000Z", true)];
+	const change: Change = { at: "2026-11-25T16:00:00.000Z", kind: "pin", subject: "x", package: "pi-anchorloop", from: "3.2.0", to: "3.3.0", source: "git", sha: "s" };
+	const impact = impactFromRows(rows, change, [change], 7, { start: "2026-11-20T00:00:00.000Z", end: "2026-11-26T00:00:00.000Z" }, () => "pi-x");
+	assert.equal(impact.before.sessions, 1);
+	assert.equal(impact.after.sessions, 1);
+	assert.equal(impact.before.anchor_before_first_edit.value, 0);
+	assert.equal(impact.after.anchor_before_first_edit.value, 1);
+	assert.equal(impact.incomplete, true, "the after window runs past the data");
+	assert.equal(versionAt([change], "pi-anchorloop", "2026-11-25T10:00:00.000Z"), undefined);
+	assert.equal(versionAt([change], "pi-anchorloop", "2026-11-25T20:00:00.000Z"), "3.3.0");
+});
+
+test("F002: the anchorloop 3.x era starts at the 3.0.0 pin time, not at midnight", async () => {
+	const { ERA_START } = await import("../src/detectors.ts");
+	assert.ok("2026-11-23T09:00:00.000Z" < ERA_START && ERA_START <= "2026-11-23T10:51:07.000Z");
 });

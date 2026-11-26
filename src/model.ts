@@ -3,11 +3,11 @@
  * metadata to explain it. The renderer reads only this; `evals_query` reads parts of it.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { ASK_BUCKETS, type DayAgg, emptyDay, mergeDay } from "./aggregate.ts";
+import { ASK_BUCKETS, type DayAgg, emptyDay, mergeDay, type SessionRow } from "./aggregate.ts";
 import type { DaysIndex } from "./build.ts";
 import type { Change } from "./changes.ts";
 import type { Coverage } from "./coverage.ts";
-import { DETECTORS } from "./detectors.ts";
+import { DETECTORS, ERA_START } from "./detectors.ts";
 import { CHANGE_KIND_META, DETECTOR_META, METRICS, NOTICE_META } from "./meta.ts";
 import { staticOwner } from "./owners.ts";
 import { dayOf } from "./paths.ts";
@@ -76,66 +76,95 @@ function detectorRates(total: DayAgg) {
 	});
 }
 
-/** The handful of numbers compared before and after a change. */
-export function impactMetrics(agg: DayAgg) {
-	const calls = Object.values(agg.tools).reduce((s, t) => s + t.calls, 0);
-	const errors = Object.values(agg.tools).reduce((s, t) => s + t.errors, 0);
-	const loads = Object.values(agg.skills).reduce((s, v) => s + v, 0);
-	const notices = Object.values(agg.notices).reduce((s, v) => s + v, 0);
-	const det = (name: string) => {
-		const d = agg.detectors[name] ?? { pass: 0, fail: 0, na: 0 };
-		return rate(d.pass, d.pass + d.fail);
-	};
-	return {
-		sessions: agg.sessions,
-		tool_error_rate: rate(errors, calls),
-		ask_cancel_rate: rate(agg.ask.cancelled, agg.ask.calls),
-		cost_per_session: rate(agg.usage.cost, agg.sessions),
-		skill_loads_per_session: rate(loads, agg.sessions),
-		notices_per_session: rate(notices, agg.sessions),
-		anchor_before_first_edit: det("anchor_before_first_edit"),
-		check_after_last_edit: det("check_after_last_edit"),
-		todo_evidence: det("todo_evidence"),
-	};
-}
+const DAY = 86_400_000;
 
-/** Sum of per-day totals over [since, until]. */
-function windowSum(dayTotals: Map<string, DayAgg>, since: string, until: string): DayAgg {
-	const out = emptyDay();
-	for (let ms = Date.parse(since); ms <= Date.parse(until); ms += 86_400_000) {
-		const agg = dayTotals.get(dayOf(ms));
-		if (agg) mergeDay(out, agg);
-	}
-	return out;
-}
-
-function impact(index: DaysIndex, dayTotals: Map<string, DayAgg>, change: Change, all: Change[], windowDays: number, project?: string) {
-	const day = change.at.slice(0, 10);
-	const ms = Date.parse(day);
-	const before = { since: dayOf(ms - windowDays * 86_400_000), until: dayOf(ms - 86_400_000), project };
-	const after = { since: day, until: dayOf(ms + (windowDays - 1) * 86_400_000), project };
-	const b = windowSum(dayTotals, before.since, before.until);
-	const a = windowSum(dayTotals, after.since, after.until);
-	const lo = Date.parse(before.since);
-	const hi = Date.parse(after.until) + 86_399_999;
-	const others = all.filter((c) => c !== change && (!change.sha || c.sha !== change.sha) && Date.parse(c.at) >= lo && Date.parse(c.at) <= hi).length;
-	const pkgRate = (agg: DayAgg) => {
-		if (change.kind !== "pin" || !change.package) return undefined;
-		let calls = 0;
-		let errors = 0;
-		for (const [tool, t] of Object.entries(agg.tools)) {
-			if (ownerFor(index, tool) !== change.package) continue;
-			calls += t.calls;
-			errors += t.errors;
+/** The handful of numbers compared before and after a change, over the sessions that started in one window. */
+export function impactMetrics(rows: SessionRow[], ownerOf: (tool: string) => string, pkg?: string) {
+	let calls = 0;
+	let errors = 0;
+	let pkgCalls = 0;
+	let pkgErrors = 0;
+	let ask = 0;
+	let dismissed = 0;
+	let cost = 0;
+	let loads = 0;
+	let notices = 0;
+	const det: Record<string, [number, number]> = {};
+	for (const r of rows) {
+		for (const [tool, [c, e]] of Object.entries(r.t)) {
+			calls += c;
+			errors += e;
+			if (pkg && ownerOf(tool) === pkg) {
+				pkgCalls += c;
+				pkgErrors += e;
+			}
 		}
-		return rate(errors, calls);
-	};
+		ask += r.ac;
+		dismissed += r.ax;
+		cost += r.c;
+		loads += r.sl;
+		notices += r.nt;
+		for (const [name, v] of Object.entries(r.ev)) {
+			const cell = (det[name] ??= [0, 0]);
+			cell[0] += v;
+			cell[1] += 1;
+		}
+	}
+	const d = (name: string) => rate(det[name]?.[0] ?? 0, det[name]?.[1] ?? 0);
 	return {
-		window: { before, after, days: windowDays },
-		before: { ...impactMetrics(b), package_error_rate: pkgRate(b) },
-		after: { ...impactMetrics(a), package_error_rate: pkgRate(a) },
-		smallSample: b.sessions < SMALL_SAMPLE || a.sessions < SMALL_SAMPLE,
-		confounded: others,
+		sessions: rows.length,
+		tool_error_rate: rate(errors, calls),
+		package_error_rate: pkg ? rate(pkgErrors, pkgCalls) : undefined,
+		ask_cancel_rate: rate(dismissed, ask),
+		cost_per_session: rate(cost, rows.length),
+		skill_loads_per_session: rate(loads, rows.length),
+		notices_per_session: rate(notices, rows.length),
+		anchor_before_first_edit: d("anchor_before_first_edit"),
+		check_after_last_edit: d("check_after_last_edit"),
+		todo_evidence: d("todo_evidence"),
+	};
+}
+
+/** Changes from one commit (or one mark) count once. */
+const commitOf = (c: Change) => c.sha ?? `${c.source}:${c.at}:${c.subject}`;
+
+/**
+ * Before = sessions that started in [at - W, at), after = [at, at + W), by start time. `incomplete` when either window
+ * reaches past the data; `confounders` are the other commits inside both windows, by the kinds they changed.
+ */
+export function impactFromRows(rows: SessionRow[], change: Change, all: Change[], windowDays: number, range: { start: string; end: string }, ownerOf: (tool: string) => string) {
+	const at = Date.parse(change.at);
+	const lo = at - windowDays * DAY;
+	const hi = at + windowDays * DAY;
+	const before: SessionRow[] = [];
+	const after: SessionRow[] = [];
+	for (const r of rows) {
+		const t = Date.parse(r.s);
+		if (t >= lo && t < at) before.push(r);
+		else if (t >= at && t < hi) after.push(r);
+	}
+	const daysWith = (list: SessionRow[]) => new Set(list.map((r) => r.s.slice(0, 10))).size;
+	const self = commitOf(change);
+	const others = new Map<string, Set<string>>();
+	for (const c of all) {
+		const t = Date.parse(c.at);
+		if (t < lo || t >= hi || commitOf(c) === self) continue;
+		const kinds = others.get(commitOf(c)) ?? new Set<string>();
+		kinds.add(c.kind);
+		others.set(commitOf(c), kinds);
+	}
+	const kinds: Record<string, number> = {};
+	for (const set of others.values()) for (const k of set) kinds[k] = (kinds[k] ?? 0) + 1;
+	const pkg = change.kind === "pin" ? change.package : undefined;
+	return {
+		window: { before: { since: new Date(lo).toISOString(), until: change.at }, after: { since: change.at, until: new Date(hi).toISOString() }, days: windowDays },
+		before: impactMetrics(before, ownerOf, pkg),
+		after: impactMetrics(after, ownerOf, pkg),
+		daysWithData: { before: daysWith(before), after: daysWith(after) },
+		incomplete: !range.start || lo < Date.parse(range.start) || hi > Date.parse(range.end || range.start),
+		smallSample: before.length < SMALL_SAMPLE || after.length < SMALL_SAMPLE,
+		confounded: others.size,
+		confounders: kinds,
 	};
 }
 
@@ -172,6 +201,7 @@ function labelsJoin(labelsFile: string, evalsFile: string) {
 
 export function buildModel(options: {
 	index: DaysIndex;
+	rows: SessionRow[];
 	changes: Change[];
 	filter: Filter;
 	windowDays: number;
@@ -201,7 +231,8 @@ export function buildModel(options: {
 		}
 	}
 	const byProject = [...projectSkills.values()].sort((a, b) => b.loads - a.loads);
-	const dayTotals = new Map(sumDays(index, { project: filter.project }).perDay);
+	const projectRows = filter.project ? options.rows.filter((r) => r.p === filter.project) : options.rows;
+	const owner = (tool: string) => ownerFor(index, tool);
 	const calls = Object.values(total.tools).reduce((s, t) => s + t.calls, 0);
 	const errors = Object.values(total.tools).reduce((s, t) => s + t.errors, 0);
 	const tokens = total.usage.input + total.usage.output + total.usage.cacheRead + total.usage.cacheWrite;
@@ -281,7 +312,7 @@ export function buildModel(options: {
 			subagentTotal: index.sessions.subagent,
 		},
 		process: {
-			eraStart: "2026-11-23",
+			eraStart: ERA_START,
 			detectors: detectorRates(total).map((d) => ({
 				...d,
 				perDay: perDay.map(([day, a]) => {
@@ -306,7 +337,7 @@ export function buildModel(options: {
 		},
 		changes: sortedChanges
 			.filter((c) => (!filter.since || c.at.slice(0, 10) >= filter.since) && (!filter.until || c.at.slice(0, 10) <= filter.until))
-			.map((c) => ({ ...c, impact: firstDay && c.at.slice(0, 10) > firstDay ? impact(index, dayTotals, c, sortedChanges, options.windowDays, filter.project) : null })),
+			.map((c) => ({ ...c, impact: index.range.start && c.at > index.range.start ? impactFromRows(projectRows, c, sortedChanges, options.windowDays, index.range, owner) : null })),
 		labels: labelsJoin(options.labelsFile, options.sessionEvalsFile),
 		coverage: options.coverage ?? null,
 	};

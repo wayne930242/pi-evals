@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { classifyPath, gitChanges, liveChanges, pinChanges, versionOn } from "../src/changes.ts";
+import { classifyPath, gitChanges, liveChanges, pinChanges, versionAt } from "../src/changes.ts";
 import { record } from "../src/schema.ts";
 
 test("pin diffs become package version changes", () => {
@@ -60,7 +60,7 @@ test("git history yields pin and path changes, read-only", () => {
 			["rule", null, null, null],
 		],
 	);
-	assert.equal(versionOn([...changes].sort((a, b) => a.at.localeCompare(b.at)), "pi-anchorloop", "2026-11-25"), "3.3.0");
+	assert.equal(versionAt([...changes].sort((a, b) => a.at.localeCompare(b.at)), "pi-anchorloop", "2026-11-25T00:00:00.000Z"), "3.3.0");
 	assert.deepEqual(gitChanges(join(repo, "missing")), []);
 });
 

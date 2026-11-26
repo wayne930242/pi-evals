@@ -363,7 +363,7 @@ export class SessionReader {
 			bump(startDay.skillSessions, skill);
 			bump(startDay.skillCost, skill, this.cost);
 		}
-		const inScope = dayOf(this.start || 0) >= ERA_START;
+		const inScope = (this.start || "") >= ERA_START;
 		const evals: SessionSummary["evals"] = {};
 		for (const result of this.tracker.results(inScope)) {
 			evals[result.name] = { label: result.label, value: result.value, explanation: result.explanation };
