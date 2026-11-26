@@ -9,6 +9,7 @@ import { PRESETS, type Preset, rangeFilter, suffix } from "./ranges.ts";
 import { buildModel, type Filter, type ReportModel } from "./model.ts";
 import { agentDir, home, layout, loadSettings, stateDir } from "./paths.ts";
 import { renderHtml, type Lang } from "./render.ts";
+import { loadWork } from "./work/join.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -73,12 +74,12 @@ export function coverageInRange(input: RangeInput, env?: Env) {
 function snapshot(env?: Env, withCoverage = true) {
 	const ctx = context(env), index = loadIndex(ctx.layout);
 	if (!index) return;
-	const rows = loadRows(ctx.layout), changes = readChanges(ctx.layout.changes), now = new Date();
+	const rows = loadRows(ctx.layout), changes = readChanges(ctx.layout.changes), now = new Date(), work = loadWork(ctx.layout);
 	const cov = withCoverage ? coverageReader(ctx, now) : undefined;
 	return { index, build(input: RangeInput, preset: Preset, comparisons?: ReportModel["changes"]) {
 		const filter = rangeFilter(input, index.lastExtract ?? now.toISOString(), preset);
 		return buildModel({ index, rows, changes, comparisons, filter, now, windowDays: ctx.settings.impactWindowDays,
-			labelsFile: ctx.layout.labels, sessionEvalsFile: ctx.layout.sessionEvals, coverage: cov?.(filter) });
+			labelsFile: ctx.layout.labels, sessionEvalsFile: ctx.layout.sessionEvals, coverage: cov?.(filter), work });
 	} };
 }
 export function indexedModel(filter: RangeInput, env?: Env, withCoverage = true) {

@@ -20,6 +20,7 @@ function weeklyPanel(m: ReportModel, L: Words) {
 export function renderHtml(m: ReportModel, lang: Lang = "zh", range: Preset | "custom" = "custom"): string {
 	const L = words(lang), w = periodRows(m), t = timeline(m, w, lang, range), c = concepts(m, w, t.lead, L);
 	const nav = [
+		["work", L("Work items", "工作")],
 		["archive", L("All changes", "所有調整")],
 		["skills", L("Skills", "技能")],
 		["packages", L("Tools", "套件與工具")],

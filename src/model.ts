@@ -8,10 +8,12 @@ import type { DaysIndex } from "./build.ts";
 import type { Change } from "./changes.ts";
 import type { Coverage } from "./coverage.ts";
 import { DETECTORS, ERA_START } from "./detectors.ts";
-import { CHANGE_KIND_META, DETECTOR_META, METRICS, NOTICE_META } from "./meta.ts";
+import { CHANGE_KIND_META, CLOSE_KIND_META, DETECTOR_META, METRICS, NOTICE_META, STALL_KIND_META } from "./meta.ts";
 import { staticOwner } from "./owners.ts";
 import { weeklyRises } from "./trends.ts";
 import { traceId } from "./schema.ts";
+import type { ItemsFile } from "./work/join.ts";
+import { workModel } from "./work/model.ts";
 
 export const SMALL_SAMPLE = 20;
 /** Data older than this (hours) is reported as stale. */
@@ -222,6 +224,8 @@ export function buildModel(options: {
 	labelsFile: string;
 	sessionEvalsFile: string;
 	coverage?: Coverage;
+	/** Joined work items (`index/items.json`), when built. */
+	work?: ItemsFile;
 	now?: Date;
 }) {
 	const { index, filter } = options;
@@ -272,7 +276,7 @@ export function buildModel(options: {
 		weekly: weeklyRises(index, filter.since ?? earliest, filter.project),
 		window: { since: filter.since ?? earliest ?? null, until: filter.until ?? days.at(-1) ?? null, days: days.length, project: filter.project ?? null },
 		freshness: { lastExtract: lastExtract ?? null, built: index.built, stale: ageHours > STALE_HOURS, ageHours: Number.isFinite(ageHours) ? round(ageHours, 1) : null },
-		meta: { metrics: METRICS, detectors: DETECTOR_META, notices: NOTICE_META, changeKinds: CHANGE_KIND_META },
+		meta: { metrics: METRICS, detectors: DETECTOR_META, notices: NOTICE_META, changeKinds: CHANGE_KIND_META, closeKinds: CLOSE_KIND_META, stallKinds: STALL_KIND_META },
 		totals: {
 			sessions: total.sessions,
 			subagentSessions: total.subagentSessions,
@@ -360,6 +364,7 @@ export function buildModel(options: {
 			.map((c) => ({ ...c, impact: index.range.start && c.at > index.range.start ? impactFromRows(projectRows, c, sortedChanges, options.windowDays, index.range, owner) : null })),
 		labels: { ...labelsJoin(options.labelsFile, options.sessionEvalsFile, labelIds), needsIndex: !!labelIds && !hasSessionIds },
 		coverage: options.coverage ?? null,
+		work: workModel(options.work, filter),
 	};
 }
 

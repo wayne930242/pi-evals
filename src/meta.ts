@@ -197,6 +197,50 @@ export const METRICS: Record<string, MetricMeta> = {
 		goodDirection: "none",
 		howComputed: t("Set when the window before starts before the first session or the window after ends after the last extract; the days with data on each side are shown.", "變更前的期間早於第一個工作階段、或變更後的期間晚於上次抽取時標記；並列出兩邊各有資料的天數。"),
 	},
+	item_cost: {
+		label: t("Cost of a work item", "一項工作的花費"),
+		meaning: t("What one todo item cost from start to close: the subagents that worked on it plus its share of the main agent.", "一項待辦從開始到收尾花了多少：做它的子代理，加上主代理分給它的部分。"),
+		goodDirection: "lower",
+		howComputed: t("Child cost is exact (every reply of each joined subagent session added up); main cost is the main's replies while the item was in progress, each split evenly among the items in progress at that moment.", "子代理費用是精確的（每個對到的子代理工作階段，每次回覆的費用加總）；主代理費用取這項工作進行中時主代理的每次回覆，平均分給當下所有進行中的工作。"),
+	},
+	item_minutes: {
+		label: t("Minutes in progress", "進行中的分鐘數"),
+		meaning: t("How long the item was marked in progress; queue time before it started is not counted.", "這項工作標成「進行中」的時間；開始前排隊等待的時間不算。"),
+		goodDirection: "none",
+		howComputed: t("From each switch to in_progress to the next switch away from it, added up.", "每次切到「進行中」到下一次離開它的時間，加總。"),
+	},
+	item_stall: {
+		label: t("Stall time", "停頓時間"),
+		meaning: t("Time inside an item's window when the main agent sat idle for two minutes or more, by what woke it.", "工作進行中，主代理閒著超過兩分鐘的時間，依叫醒它的是誰分類。"),
+		goodDirection: "lower",
+		howComputed: t("A stall starts when the main ends a turn (or asks you a question) and ends at the next prompt, peer message, subagent result, timer or job ending; gaps under two minutes are left out.", "主代理結束一輪（或開始問你問題）時開始，下一個提示、其他工作階段的訊息、子代理結果、排程或背景工作結束時結束；少於兩分鐘不算。"),
+	},
+	item_per_100_lines: {
+		label: t("Cost per 100 changed lines", "每百行改動的花費"),
+		meaning: t("Cost scaled by the size of the change, so a big item and a small one can be compared.", "把花費除以改動大小，大工作和小工作才比得起來。"),
+		goodDirection: "lower",
+		howComputed: t("Item cost divided by added plus deleted lines (git) from the previous item's last evidence commit to this item's last, times 100; only items whose evidence names commits.", "工作花費除以從上一項工作最後的證據提交到這項最後的證據提交之間，git 增刪的行數，再乘 100；只算證據有記提交的工作。"),
+	},
+};
+
+export const CLOSE_KIND_META: Record<string, Text> = {
+	review_done: t("Reviewer approved", "審查通過"),
+	landed: t("Car landed", "車已進站（合併）"),
+	wrap: t("Closed at a wrap", "收工時結束"),
+	evidence: t("Done with evidence", "附證據完成"),
+	unproven: t("Marked done, no evidence", "標完成，沒附證據"),
+	deleted: t("Deleted", "刪除"),
+	open: t("Still open", "還開著"),
+};
+
+export const STALL_KIND_META: Record<string, Text> = {
+	human: t("waiting for you", "等你"),
+	peer: t("waiting for another session", "等其他工作階段"),
+	child: t("waiting for a subagent", "等子代理"),
+	timer: t("waiting for a timer", "等排程喚醒"),
+	ci: t("waiting for a background job", "等背景工作"),
+	device: t("waiting for another device", "等其他裝置"),
+	working: t("still working (never stopped)", "還在做（沒停下來）"),
 };
 
 export const DETECTOR_META: Record<string, DetectorMeta> = {

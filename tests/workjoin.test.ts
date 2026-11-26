@@ -132,3 +132,21 @@ test("an open item waits on an open ledger wait when no child is running", () =>
 	const items = byTitle(join_([s], dir));
 	assert.deepEqual(items["Still going"].open, { since: t(900), kind: "device", on: "L340" });
 });
+
+test("the comparison says plainly when there are too few items, and compares only like with like", async () => {
+	const { workModel } = await import("../src/work/model.ts");
+	const { verdictText } = await import("../src/report/work.ts");
+	const item = (i: number, model: string, cost: number, kind: "delegated" | "self" = "delegated") => ({
+		key: `s#${i}`, title: `T${i}`, project: "p", session: "s", sessions: ["s"], level: "top" as const, status: "completed" as const, created: t(i), start: t(i), close: t(i + 1), activeMs: 60_000,
+		closeKind: "evidence" as const, evidence: 1, blockedBy: 0, mainCost: 0, childCost: cost, children: kind === "delegated" ? ["w"] : [], kind, role: "worker", model, stalls: [], stallMs: {}, lastActivity: t(i + 1),
+	});
+	const few = [item(1, "a", 1), item(2, "a", 1), item(3, "b", 5), item(4, "b", 5), item(5, "self-model", 9, "self")];
+	const m = workModel({ v: 1, built: t(100), items: few, sessions: [] }, {});
+	const byModel = m!.compare.find((c) => c.kind === "delegated" && c.dimension === "model")!;
+	assert.equal(byModel.verdict.kind, "few");
+	assert.match(verdictText(byModel, byModel.verdict, (_en, zh) => zh), /^件數太少，還看不出來/);
+	assert.ok(!byModel.groups.some((g) => g.value === "self-model"), "self items are compared only with self items");
+	const many = [...Array(6).keys()].flatMap((i) => [item(10 + i, "a", 1), item(20 + i, "b", 4)]);
+	const enough = workModel({ v: 1, built: t(100), items: many, sessions: [] }, {})!.compare.find((c) => c.dimension === "model")!;
+	assert.deepEqual(enough.verdict, { kind: "cheaper", a: "a", b: "b", by: 0.75 });
+});

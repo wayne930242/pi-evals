@@ -1,6 +1,7 @@
 import type { ReportModel } from "../model.ts";
 import { type concepts, lesson, selfCheck } from "./concepts.ts";
 import { duration, esc, type Lang, num, pct, table, usd, words } from "./format.ts";
+import { workSection } from "./work.ts";
 
 export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof concepts>) {
 	const L = words(lang), meta = m.meta.metrics;
@@ -167,6 +168,7 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 			}</p>`,
 	);
 	return [
+		workSection(m, lang, cards, lesson),
 		skills,
 		packages,
 		ask,
@@ -179,7 +181,7 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 		section(
 			"concepts",
 			L("Concepts", "概念"),
-			L("Use these five ideas when you read the next report.", "下次讀報表時，可以用這五個概念判讀數字。"),
+			L(`Use these ${Object.keys(cards).length} ideas when you read the next report.`, `下次讀報表時，可以用這 ${Object.keys(cards).length} 個概念判讀數字。`),
 			`<div class="notes-grid">${Object.values(cards).map((c) => lesson(c, L)).join("")}</div>${selfCheck(L)}`,
 		),
 	].join("");
