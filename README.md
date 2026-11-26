@@ -11,7 +11,7 @@ Agents can read the same numbers through one tool, `evals_query`.
 - **Ask-user**: questions asked, how long you took to answer, how many you dismissed, and whether the answer came from the terminal or a remote channel.
 - **Monitors**: background jobs by outcome and duration.
 - **Subagents**: launches by role and model, and their cost by role.
-- **Process**: four checks of the anchorloop rules per session, from 2026-11-23 (anchorloop 3.0.0) on; see [docs/design.md](docs/design.md#process-detectors).
+- **Process**: four checks of the anchorloop rules per session, for sessions started after anchorloop 3.0.0 was pinned (2026-11-23T10:51:07Z); see [docs/design.md](docs/design.md#process-detectors).
 - **Cost**: model cost and tokens, and the cost of the sessions that loaded each skill.
 - **Your changes**: package pins, model routing, rules, skills and agent roles from the git history of your setup repositories, version changes seen live, and notes you add with `/evals mark`, each with the same numbers in the days before and after.
 
@@ -94,6 +94,7 @@ The renderer reads only the model, so a redesigned report can replace it without
 | `index/records/<YYYY-MM>/<key>.jsonl` | Back-filled records, one file per session file. |
 | `index/checkpoint.json` | Size, modification time and summary per session file. |
 | `index/days.json` | Aggregates by day and project. |
+| `index/sessions.json` | A few numbers per session with its start time, for splitting sessions at a change's time. |
 | `index/session-evals.json` | Process check results per session, for joining your labels. |
 | `changes.jsonl`, `marks.jsonl` | The change timeline and your notes. |
 | `labels.jsonl` | Your labels, when you add them (a later phase): `{ "session_id", "evaluation_name", "label": "pass" \| "fail" }` per line. The report then shows how often you and the automatic checks agree. |

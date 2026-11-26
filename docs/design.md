@@ -63,16 +63,18 @@ Anchor and change reading is ported from anchorloop's close guard (`pi/close-gua
 - `todo_evidence`: completed tasks in the final todo list carry evidence; the value is the share that do.
 - `close_guard_quiet`: an editing session got no close-guard reminder about a missing or failing check (an evidence hand-off reminder does not count).
 
-Only sessions from 2026-11-23 (anchorloop 3.0.0) on are judged; older ones are out of scope rather than failing (inventory, Gotchas).
+Only sessions that started after anchorloop 3.0.0 reached this setup are judged: the pin commit in weihung-basic-agent, 2026-11-23T10:51:07Z. Older sessions are out of scope rather than failing (inventory, Gotchas), and they are left out of the "not applicable" counts.
 Like the guard, an edit made through bash is not seen as a change.
 These are process checks on observable events, which suits a process skill whose path is the product (research §1); they say how often the rules were followed, not whether the work was right.
-The anchorloop version per day comes from the pin history in the change timeline.
+A session's anchorloop version is the newest pin in the change timeline at or before the session's start, so a pin at 16:46 splits that day's sessions at 16:46.
 
 ### Change impact
 
-Each change gets the same handful of numbers over the days before and after it (7 each by default), with the session count on each side.
-A side with fewer than 20 sessions is flagged as too small to read, and other changes inside either window (not from the same commit) are counted as confounders.
-Both flags are shown, not hidden: these comparisons hint at an effect and prove none (research §1 on noise: single runs vary by several points).
+Each change gets the same handful of numbers for the sessions that started in the 7 days (by default) before the change's time and in the 7 days from it, with the session count on each side.
+The split is by start time, not calendar day: an earlier version split by day and credited a pin's effect to the 588 sessions of that day that ran before the pin.
+Three flags go with each comparison: a side with fewer than 20 sessions is too small to read; a window that reaches before the first session or past the last extract is incomplete, with the days that have data on each side; and other commits inside the windows are counted once each, by the kinds they changed.
+The flags are shown, not hidden: these comparisons hint at an effect and prove none (research §1 on noise: single runs vary by several points).
+With this setup's pace of change almost every comparison has other commits nearby, so the kinds matter more than the count.
 
 ### Report
 

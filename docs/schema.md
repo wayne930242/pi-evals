@@ -44,7 +44,7 @@ Every record carries `session.id` (the pi session id from the session header) an
 | `todo_evidence` | `all_evidenced` | `completed_without_evidence` (value = share with evidence) | `no_completed_task` |
 | `close_guard_quiet` | `no_notice` | the commonest notice kind | `no_edit` |
 
-Sessions that started before 2026-11-23 get `na` with `out_of_scope_pre_3.0` for all four.
+Sessions that started before 2026-11-23T10:51:07Z (the anchorloop 3.0.0 pin) get `na` with `out_of_scope_pre_3.0` for all four.
 
 ## Labels (for a later phase)
 
