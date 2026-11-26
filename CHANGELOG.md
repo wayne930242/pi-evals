@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Work comparisons in `items`, `findings`, and the HTML report now give separate costs per item and per 100 changed lines, with the number of items behind each comparison. When the measures disagree, the report explains why neither group is necessarily cheaper overall.
+
 ## 0.4.0
 
 - The report has a 「工作」 section: every todo item with its cost (subagents exact, main agent split evenly among items in progress at the same time), minutes in progress, how it closed (reviewer approval, a landed car, a wrap, evidence) and where it stalled, by what woke the main agent. A comparison of like with like says whether one model, role or anchorloop version costs less per item and per 100 changed lines, or that there are too few items to tell. Open items show where they stopped, on whom they wait, and for how long. Two concept cards explain cost attribution and fair comparison with this report's numbers.

@@ -1,20 +1,15 @@
+import { comparisonText } from "./wording.ts";
 /** The `items` view of `evals_query` and its line in `findings`: numbers, names, and titles in double quotes. */
-import type { Comparison, Verdict, WorkModel } from "./model.ts";
+import type { Comparison, WorkModel } from "./model.ts";
 
 const usd = (v: number | null) => (v === null ? "n/a" : `$${v.toFixed(2)}`);
 const mins = (m: number) => (m < 90 ? `${Math.round(m)}m` : m < 2880 ? `${(m / 60).toFixed(1)}h` : `${(m / 1440).toFixed(1)}d`);
 /** A title for agent output: quoted, inner quotes swapped, at most 50 characters. */
 const quote = (title: string) => `"${Array.from(title.replace(/"/g, "'")).slice(0, 50).join("")}"`;
 
-function verdict(c: Comparison, v: Verdict, lines = false): string {
-	const n = (value?: string) => {
-		const g = c.groups.find((x) => x.value === value);
-		return (lines ? g?.nLines : g?.n) ?? 0;
-	};
-	if (v.kind === "single") return "one group only";
-	if (v.kind === "few") return `too few items to tell (${n(v.a)}/${n(v.b)}, need 5 each)`;
-	if (v.kind === "same") return "no clear difference (<20%)";
-	return `${v.a} ${Math.round((v.by ?? 0) * 100)}% less than ${v.b} (n ${n(v.a)}/${n(v.b)})`;
+function summary(c: Comparison) {
+	const kind = c.kind === "delegated" ? "Work handed to subagents" : "Work done by the main agent";
+	return `${kind} by ${c.dimension}: ${comparisonText(c, en => en)}`;
 }
 
 export function itemsView(w: WorkModel | null): string[] {
@@ -28,9 +23,9 @@ export function itemsView(w: WorkModel | null): string[] {
 		`median item ${usd(w.cost.median)}, ${w.cost.medianMinutes ?? "n/a"} min in progress`,
 		`closed by: ${kinds || "none"}`,
 		`stall time in finished items, by what woke the main: ${stalls || "none"}`,
-		"cheaper? same kind only, per item (per 100 changed lines):",
+		"Median costs for similar work (differences, not causes):",
 	];
-	for (const c of w.compare) out.push(`  ${c.kind} by ${c.dimension}: ${verdict(c, c.verdict)} (${verdict(c, c.verdictLines, true)})`);
+	for (const c of w.compare) out.push(summary(c));
 	if (w.open.length) out.push("open, stopped where / waiting on / how long:");
 	for (const o of w.open.slice(0, 4)) out.push(`- ${quote(o.title || o.key)} ${o.kind}${o.on ? ` on ${o.on}` : ""}, ${mins(o.waitMinutes)}`);
 	const costly = [...w.list].sort((a, b) => b.main + b.child - (a.main + a.child)).slice(0, 3);
@@ -44,10 +39,10 @@ export function itemsFinding(w: WorkModel | null): string | undefined {
 	if (!w) return undefined;
 	// Model first: a role split mixes kinds of work (planning vs building), and versions overlap other changes.
 	const order = ["model", "anchorloop", "role"];
-	const cheaper = w.compare.filter((c) => c.verdict.kind === "cheaper").sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "delegated" ? -1 : 1) || order.indexOf(a.dimension) - order.indexOf(b.dimension))[0];
+	const cheaper = w.compare.filter((c) => c.verdict.kind === "cheaper" || c.verdictLines.kind === "cheaper").sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "delegated" ? -1 : 1) || order.indexOf(a.dimension) - order.indexOf(b.dimension))[0];
 	const waits = w.open.filter((o) => o.kind !== "human" && o.kind !== "working" && o.waitMinutes >= 60);
 	const parts: string[] = [];
-	if (cheaper) parts.push(`${cheaper.kind} items by ${cheaper.dimension}: ${verdict(cheaper, cheaper.verdict)}`);
+	if (cheaper) parts.push(`${summary(cheaper)} This is a difference, not its cause.`);
 	if (waits.length) parts.push(`${waits.length} open item(s) waiting over 1h, longest ${mins(Math.max(...waits.map((o) => o.waitMinutes)))} on ${waits.sort((a, b) => b.waitMinutes - a.waitMinutes)[0].on ?? waits[0].kind}`);
 	return parts.length ? `Work items: ${parts.join("; ")} → items` : undefined;
 }

@@ -1,7 +1,7 @@
 import type { ReportModel } from "../model.ts";
 import { type Change, esc, num, usd, type Words } from "./format.ts";
 import type { Week } from "./week.ts";
-import { verdictText } from "./work.ts";
+import { comparisonText } from "../work/wording.ts";
 
 /** The two work-item ideas, with this report's own numbers. */
 function workCards(m: ReportModel, L: Words) {
@@ -11,7 +11,7 @@ function workCards(m: ReportModel, L: Words) {
 		return { attribution: [L("Who a cost belongs to", "花費歸屬"), none], cheaper: [L("When is one way cheaper?", "怎麼比才算比較省"), none] };
 	}
 	const first = w.compare.find((c) => c.kind === "delegated") ?? w.compare[0];
-	const now = first ? verdictText(first, first.verdict, L) : L("No finished items to compare yet.", "還沒有完成的工作可以比。");
+	const now = first ? comparisonText(first, L) : L("No finished items to compare yet.", "還沒有完成的工作可以比。");
 	return {
 		attribution: [
 			L("Who a cost belongs to", "花費歸屬"),

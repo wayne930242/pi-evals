@@ -1,6 +1,7 @@
+import { comparisonText } from "../work/wording.ts";
 /** The 「工作」 section: one row per work item, a like-with-like comparison, and the items still open. */
 import type { ReportModel } from "../model.ts";
-import type { Comparison, Verdict, WorkModel } from "../work/model.ts";
+import type { WorkModel } from "../work/model.ts";
 import { esc, type Lang, num, usd, type Words, words } from "./format.ts";
 
 const SHOWN = 15;
@@ -9,18 +10,6 @@ export function span(minutes: number, L: Words) {
 	if (minutes < 90) return L(`${Math.round(minutes)} min`, `${Math.round(minutes)} 分`);
 	if (minutes < 48 * 60) return L(`${(minutes / 60).toFixed(1)} h`, `${(minutes / 60).toFixed(1)} 小時`);
 	return L(`${(minutes / 1440).toFixed(1)} days`, `${(minutes / 1440).toFixed(1)} 天`);
-}
-
-const pct = (v: number) => `${Math.round(v * 100)}%`;
-
-export function verdictText(c: Comparison, v: Verdict, L: Words, lines = false) {
-	const g = (value?: string) => c.groups.find((x) => x.value === value);
-	const n = (value?: string) => (lines ? g(value)?.nLines : g(value)?.n) ?? 0;
-	const what = lines ? L("per 100 changed lines", "每百行") : L("per item", "每件");
-	if (v.kind === "single") return v.a ? L(`Only one group (${v.a}): nothing to compare it with.`, `只有一組（${v.a}），沒有可比的對象。`) : L("No items with a line count.", "沒有算得出行數的工作。");
-	if (v.kind === "few") return L(`Too few items to tell yet (${v.a} ${n(v.a)}, ${v.b} ${n(v.b)}; each group needs 5).`, `件數太少，還看不出來（${v.a} ${n(v.a)} 件、${v.b} ${n(v.b)} 件，每組至少要 5 件）。`);
-	if (v.kind === "same") return L(`${v.a} and ${v.b} cost about the same ${what} (less than 20% apart).`, `${v.a} 和 ${v.b} ${what}花費差不到兩成，看不出差別。`);
-	return L(`${v.a} costs ${pct(v.by ?? 0)} less ${what} than ${v.b} (median of ${n(v.a)} and ${n(v.b)} items of the same kind). This is a difference, not its cause.`, `${v.a} ${what}比 ${v.b} 便宜 ${pct(v.by ?? 0)}（同類工作的中位數，各 ${n(v.a)}、${n(v.b)} 件）。這是差異，不是原因。`);
 }
 
 function stallText(stalls: Record<string, number>, m: ReportModel, lang: Lang) {
@@ -55,7 +44,7 @@ export function workSection(m: ReportModel, lang: Lang, cards: { attribution: st
 				(c) =>
 					`<article class="panel"><h3>${esc(kinds[c.kind])}　／　${L("by", "依")}${esc(dims[c.dimension])}</h3><div class="scroll"><table><thead><tr><th scope="col">${esc(dims[c.dimension])}</th><th scope="col">${L("Items", "件數")}</th><th scope="col">${L("Median per item", "每件中位數")}</th><th scope="col">${L("Per 100 lines (items)", "每百行（件數）")}</th></tr></thead><tbody>${
 						c.groups.map((g) => `<tr><td>${esc(g.value)}</td><td>${num(g.n)}</td><td>${usd(g.median)}</td><td>${g.per100 === null ? "—" : `${usd(g.per100)}（${num(g.nLines)}）`}</td></tr>`).join("")
-					}</tbody></table></div><p class="verdict">${esc(verdictText(c, c.verdict, L))}</p><p class="muted">${esc(verdictText(c, c.verdictLines, L, true))}</p></article>`,
+					}</tbody></table></div><p class="verdict">${esc(comparisonText(c, L))} ${L("This is a difference, not its cause.", "這是差異，不是原因。")}</p></article>`,
 			)
 			.join("")
 		: `<p class="muted">${L("No finished items to compare.", "沒有可比較的已完成工作。")}</p>`;

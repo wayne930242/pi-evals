@@ -135,7 +135,7 @@ test("an open item waits on an open ledger wait when no child is running", () =>
 
 test("the comparison says plainly when there are too few items, and compares only like with like", async () => {
 	const { workModel } = await import("../src/work/model.ts");
-	const { verdictText } = await import("../src/report/work.ts");
+	const { verdictText } = await import("../src/work/wording.ts");
 	const item = (i: number, model: string, cost: number, kind: "delegated" | "self" = "delegated") => ({
 		key: `s#${i}`, title: `T${i}`, project: "p", session: "s", sessions: ["s"], level: "top" as const, status: "completed" as const, created: t(i), start: t(i), close: t(i + 1), activeMs: 60_000,
 		closeKind: "evidence" as const, evidence: 1, blockedBy: 0, mainCost: 0, childCost: cost, children: kind === "delegated" ? ["w"] : [], kind, role: "worker", model, stalls: [], stallMs: {}, lastActivity: t(i + 1),
@@ -149,6 +149,9 @@ test("the comparison says plainly when there are too few items, and compares onl
 	const many = [...Array(6).keys()].flatMap((i) => [item(10 + i, "a", 1), item(20 + i, "b", 4)]);
 	const enough = workModel({ v: 1, built: t(100), items: many, sessions: [] }, {})!.compare.find((c) => c.dimension === "model")!;
 	assert.deepEqual(enough.verdict, { kind: "cheaper", a: "a", b: "b", by: 0.75 });
+	const { itemsFinding } = await import("../src/work/query.ts");
+	const split = { ...enough, groups: enough.groups.map(g => ({ ...g, nLines: 5 })), verdictLines: { kind: "same" as const, a: "a", b: "b" } };
+	assert.match(itemsFinding({ ...m!, compare: [split] })!, /per item.*6 vs 6.*per 100 changed lines.*5 vs 5.*item sizes.*which is cheaper/i);
 });
 
 test("the items query view and its findings line stay small and say when items are too few", async () => {
