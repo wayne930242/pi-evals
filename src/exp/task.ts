@@ -1,7 +1,8 @@
 /**
  * A suite is a directory: `suite.json` (model, thinking, forbidden paths), `arms/<name>.json` (extensions, skills and
  * system-prompt files added to the bare flags, paths relative to the suite), and `tasks/<id>/` (task.json, prompt.md,
- * prompt.original.md, optional setup.sh, hidden check/, reference).
+ * prompt.original.md, optional setup.sh, hidden check/, reference). An optional `dispatch` in suite.json makes the trial
+ * agent a dispatching main: pi in RPC mode with pi-herdr-agents' `subagent`, its children in a run-private Herdr server.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -40,6 +41,15 @@ export interface Arm {
 	appendSystemPrompt: string[];
 }
 
+/** A dispatching main: the vendored pi-herdr-agents root and the per-trial child caps. */
+export interface Dispatch {
+	herdrAgents: string;
+	/** Children running at once; a launch beyond it is blocked until one finishes. */
+	maxConcurrent: number;
+	/** Child launches per trial. */
+	maxLaunches: number;
+}
+
 export interface Suite {
 	dir: string;
 	model: string;
@@ -52,6 +62,23 @@ export interface Suite {
 	extensions: string[];
 	arms: Map<string, Arm>;
 	tasks: Task[];
+	/** Set only for a dispatch suite; single-agent suites run exactly as before. */
+	dispatch?: Dispatch;
+}
+
+/** The host extension entry inside a pi-herdr-agents checkout. */
+export const herdrAgentsEntry = (root: string) => join(root, "pi-extension", "subagents", "index.ts");
+
+function loadDispatch(raw: { herdrAgents?: string; maxConcurrent?: number; maxLaunches?: number }, abs: (p: string) => string, where: string): Dispatch {
+	if (!raw.herdrAgents) throw new Error(`${where}: dispatch.herdrAgents is required`);
+	const herdrAgents = abs(raw.herdrAgents);
+	if (!existsSync(herdrAgentsEntry(herdrAgents))) throw new Error(`${where}: dispatch.herdrAgents has no ${herdrAgentsEntry(herdrAgents)}`);
+	const count = (v: number | undefined, fallback: number, name: string) => {
+		const n = v ?? fallback;
+		if (!Number.isInteger(n) || n < 1) throw new Error(`${where}: dispatch.${name} must be a positive integer`);
+		return n;
+	};
+	return { herdrAgents, maxConcurrent: count(raw.maxConcurrent, 3, "maxConcurrent"), maxLaunches: count(raw.maxLaunches, 8, "maxLaunches") };
 }
 
 const KINDS: Kind[] = ["anchor", "light", "should_not"];
@@ -67,7 +94,7 @@ function json<T>(file: string): T {
 export function loadSuite(dir: string): Suite {
 	const root = resolve(dir);
 	const abs = (p: string) => (isAbsolute(p) ? p : join(root, p));
-	const meta = json<{ model?: string; thinking?: string; forbidden?: string[]; extensions?: string[]; followUp?: string }>(join(root, "suite.json"));
+	const meta = json<{ model?: string; thinking?: string; forbidden?: string[]; extensions?: string[]; followUp?: string; dispatch?: { herdrAgents?: string; maxConcurrent?: number; maxLaunches?: number } }>(join(root, "suite.json"));
 	if (!meta.model || !meta.thinking) throw new Error(`${root}/suite.json: model and thinking are required`);
 	const arms = new Map<string, Arm>();
 	for (const file of readdirSync(join(root, "arms")).filter((f) => f.endsWith(".json")).sort()) {
@@ -80,7 +107,10 @@ export function loadSuite(dir: string): Suite {
 		.filter((d) => d.isDirectory() && existsSync(join(tasksDir, d.name, "task.json")))
 		.map((d) => loadTask(join(tasksDir, d.name)))
 		.sort((a, b) => a.id.localeCompare(b.id));
-	return { dir: root, model: meta.model, thinking: meta.thinking, forbidden: [...(meta.forbidden ?? []), join(root, "tasks")], ...(meta.followUp ? { followUp: meta.followUp } : {}), extensions: (meta.extensions ?? []).map(abs), arms, tasks };
+	const dispatch = meta.dispatch ? loadDispatch(meta.dispatch, abs, `${root}/suite.json`) : undefined;
+	// Children run in Herdr panes whose shells all share one HOME, so a trial cannot give them its own.
+	if (dispatch) for (const t of tasks) if (t.home === "work") throw new Error(`${t.dir}/task.json: home "work" is not supported in a dispatch suite`);
+	return { dir: root, model: meta.model, thinking: meta.thinking, forbidden: [...(meta.forbidden ?? []), join(root, "tasks")], ...(meta.followUp ? { followUp: meta.followUp } : {}), extensions: (meta.extensions ?? []).map(abs), arms, tasks, ...(dispatch ? { dispatch } : {}) };
 }
 
 export function loadTask(dir: string): Task {

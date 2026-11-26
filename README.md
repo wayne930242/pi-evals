@@ -119,6 +119,24 @@ Each task's starting tree is built once as a single fresh commit (no history, re
 
 Runs are kept in `~/.local/state/pi-evals/experiments/<run-id>/` and built fixtures in `~/.local/state/pi-evals/fixtures/`.
 
+#### Dispatching mains
+
+By default the trial agent is one headless pi. A suite whose `suite.json` has a `dispatch` block tests a main agent that may hand work to children through [pi-herdr-agents](https://github.com/wayne930242/pi-herdr-agents)' `subagent` tool:
+
+```json
+"dispatch": { "herdrAgents": "vendor/pi-herdr-agents@3.12.1", "maxConcurrent": 3, "maxLaunches": 8 }
+```
+
+`herdrAgents` is a pi-herdr-agents checkout with its `node_modules`, vendored into the suite. Suites without `dispatch` run exactly as before.
+
+- **The main** runs as `pi --mode rpc`, driven by the runner. The suite's model is its only model in scope (`--models`), so children can only be launched with that model. When the main settles, the runner asks whether children are still out. If they are, it waits: a child's result starts the main's next turn. Once nothing is out, the runner sends the suite's follow-up once, waits again, then closes the session.
+- **Children** run in a Herdr server private to the run, with one workspace per trial; your own Herdr is never contacted. Children read the arm from the trial's agent dir: `settings.json` (the suite and arm extensions and skills, nothing from `~/.agents/skills`), `APPEND_SYSTEM.md` (the arm's system-prompt files; the main reads the same file) and `herdr-agents/config.json` (the suite's model for every task, depth 1). They inherit `PI_OFFLINE`, and their sessions are kept under the trial's `agent/sessions/`.
+- **Limits.** A launch is refused with a worktree, as a persistent child, with a cwd outside the work dir, while `maxConcurrent` children are out, or after `maxLaunches` launches. A trial occupies up to 1 + `maxConcurrent` pi sessions; size `--parallel` with that in mind. Tasks with `home: "work"` are not supported.
+- **Cleanup.** When the main ends or times out, its workspace is closed, and every process still carrying the trial's agent dir or running in its work dir is killed. The Herdr server stops at the end of the run.
+- **Grading.** Process checks still read the main's transcript only, so work a child did (an anchor it wrote, a check it ran) does not count for the main. Each trial records `children` (name, model, turns, tool calls, tokens, cost, minutes, and the skills and appended prompt the child loaded), `childEfficiency`, `totalEfficiency` and `dispatch` (launches, results, blocked launches, most children at once, time spent waiting, processes left over). A leak in a child's transcript, or a quota refusal in it, counts as it would in the main's. A child that loaded a different arm from its main makes the trial invalid (`arm_mismatch`). `exp show` reports cost and agent-minutes including children, children per trial, and one line per trial.
+
+`exp check` on a dispatch suite also checks that `herdr` runs and that the vendored pi-herdr-agents has its dependencies. `exp run --herdr <bin>` picks another Herdr binary. Children always start as a bare `pi` found on PATH: the runner puts the directory of the `pi` it uses first, and a `--pi` wrapper with another name does not reach the children.
+
 ### The `evals_query` tool
 
 Start with `findings` (under 1,500 bytes), then follow one pointer if you need the counts.

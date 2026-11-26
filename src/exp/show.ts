@@ -37,7 +37,8 @@ export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], ag
 		out.push(pad(NAMES[metric], w) + cells.join("") + delta);
 	}
 	out.push(pad("cost per trial (USD equiv.)", w) + summary.arms.map((a) => pad(`$${a.costPerTrial.toFixed(2)}`, 12)).join(""));
-	out.push(pad("minutes per trial", w) + summary.arms.map((a) => pad(a.minutesPerTrial.toFixed(1), 12)).join(""));
+	if (summary.arms.some((a) => a.childrenPerTrial !== undefined)) out.push(pad("children per trial", w) + summary.arms.map((a) => pad(a.childrenPerTrial === undefined ? "—" : a.childrenPerTrial.toFixed(1), 12)).join(""));
+	out.push(pad(meta.dispatch ? "agent-minutes per trial" : "minutes per trial", w) + summary.arms.map((a) => pad(a.minutesPerTrial.toFixed(1), 12)).join(""));
 	out.push(pad("total cost", w) + summary.arms.map((a) => pad(`$${a.costTotal.toFixed(2)}`, 12)).join(""));
 	out.push(pad("invalid trials", w) + summary.arms.map((a) => pad(String(a.invalid), 12)).join(""));
 	out.push("");
@@ -51,6 +52,15 @@ export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], ag
 	}
 	if (summary.doneClaimFail.length) out.push("", `done claimed but check failed: ${summary.doneClaimFail.map((d) => `${d.task}/${d.arm}/${d.n}`).join(", ")}`);
 	for (const a of agreement) out.push(`labels vs graders, ${a.rule}: ${a.agree}/${a.n} agree${a.unclear ? `, ${a.unclear} unclear` : ""}${a.disagree.length ? `; disagree: ${a.disagree.join(", ")}` : ""}`);
+	if (meta.dispatch) {
+		out.push("", `dispatch: max ${meta.dispatch.maxConcurrent} children at once, ${meta.dispatch.maxLaunches} launches per trial; cost and agent-minutes include children`);
+		for (const r of [...records].sort((x, y) => `${x.task}/${x.arm}/${x.n}`.localeCompare(`${y.task}/${y.arm}/${y.n}`))) {
+			const d = r.dispatch;
+			if (!d) continue;
+			const total = r.totalEfficiency ?? r.efficiency;
+			out.push(`  ${r.task}/${r.arm}/${r.n}: ${r.outcome ? "pass" : "fail"}${r.valid ? "" : " (invalid)"}${r.timedOut ? " timed out" : ""} · ${r.children?.length ?? 0} child(ren), ${d.launches} launched, ${d.results} result(s), ${d.blocked} blocked · cost $${total.cost.toFixed(2)} (children $${(r.childEfficiency?.cost ?? 0).toFixed(2)}) · waited ${(d.waitedMs / 1000).toFixed(0)} s · leftover ${d.leftover}, alive after ${d.aliveAfter}, workspace ${d.workspaceClosed ? "closed" : "NOT closed"}`);
+		}
+	}
 	const invalid = records.filter((r) => !r.valid);
 	if (invalid.length) out.push(`invalid: ${invalid.map((r) => `${r.task}/${r.arm}/${r.n} (${r.invalid})`).join(", ")}`);
 	return out.join("\n");

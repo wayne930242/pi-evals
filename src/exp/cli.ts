@@ -1,4 +1,5 @@
 /** `pi-evals exp check|run|grade|show`: paired experiments, CLI-only (the extension never imports src/exp). */
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { layout } from "../paths.ts";
@@ -11,7 +12,7 @@ import { loadSuite } from "./task.ts";
 import { gate } from "./validity.ts";
 
 export const EXP_USAGE = `  pi-evals exp check <suite> [--task id]... [--rebuild]
-  pi-evals exp run <suite> --arms a,b --k N [--tasks a,b] [--parallel N] [--run-id id] [--pi <bin>] [--rerun <reason>]
+  pi-evals exp run <suite> --arms a,b --k N [--tasks a,b] [--parallel N] [--run-id id] [--pi <bin>] [--herdr <bin>] [--rerun <reason>]
   pi-evals exp grade <run-id|dir>
   pi-evals exp show <run-id|dir> [--json]
   pi-evals exp label <run-id|dir> [--answer <file|->]   (page of flipped trials; --answer writes the labels)`;
@@ -35,6 +36,19 @@ export async function expMain(args: string[]): Promise<number> {
 		const suite = loadSuite(target);
 		const tasks = selectTasks(suite, flags(rest, "--task"));
 		let failed = 0;
+		let preflight = true;
+		if (suite.dispatch) {
+			// A dispatch suite also needs Herdr and the vendored pi-herdr-agents the main loads.
+			let herdr = "";
+			try {
+				herdr = execFileSync(flag(rest, "--herdr") ?? "herdr", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+			} catch {}
+			const pkg = join(suite.dispatch.herdrAgents, "package.json");
+			const version = existsSync(pkg) ? (JSON.parse(readFileSync(pkg, "utf8")) as { version?: string }).version : undefined;
+			const deps = existsSync(join(suite.dispatch.herdrAgents, "node_modules", "@nubl", "maestro"));
+			process.stdout.write(`dispatch: ${herdr || "herdr NOT FOUND"} · pi-herdr-agents ${version ?? "?"}${deps ? "" : " WITHOUT node_modules"} · max ${suite.dispatch.maxConcurrent} at once, ${suite.dispatch.maxLaunches} launches\n`);
+			preflight = Boolean(herdr && deps);
+		}
 		for (const task of tasks) {
 			process.stdout.write(`${task.id} (${task.kind})\n`);
 			const fixture = buildFixture(suite, task, fixturesDir(), { rebuild: rest.includes("--rebuild"), log: (line) => process.stderr.write(`  ${line}\n`) });
@@ -43,7 +57,7 @@ export async function expMain(args: string[]): Promise<number> {
 			if (!r.ok) failed++;
 		}
 		process.stdout.write(`${tasks.length - failed}/${tasks.length} tasks pass the validity gate\n`);
-		return failed ? 1 : 0;
+		return failed || !preflight ? 1 : 0;
 	}
 	if (sub === "run" && target) {
 		const arms = list(flag(rest, "--arms"));
@@ -58,6 +72,7 @@ export async function expMain(args: string[]): Promise<number> {
 			parallel: parallel === undefined ? undefined : Number(parallel),
 			runId: flag(rest, "--run-id"),
 			piBin: flag(rest, "--pi"),
+			herdrBin: flag(rest, "--herdr"),
 			rerun: flag(rest, "--rerun"),
 			onProgress: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
 		});

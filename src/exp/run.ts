@@ -8,9 +8,10 @@ import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { stateDir } from "../paths.ts";
 import { buildFixture } from "./fixture.ts";
+import { type HerdrLab, startHerdrLab, stopHerdrLab } from "./herdr-lab.ts";
 import { summarize } from "./summary.ts";
 import { loadSuite, type Suite, type Task } from "./task.ts";
-import { gradeTrial, runTrial, type TrialRecord, trialDirOf } from "./trial.ts";
+import { gradeTrial, labEnv, runTrial, type TrialRecord, trialDirOf } from "./trial.ts";
 
 export const experimentsDir = (env: NodeJS.ProcessEnv = process.env) => join(stateDir(env), "experiments");
 export const fixturesDir = (env: NodeJS.ProcessEnv = process.env) => join(stateDir(env), "fixtures");
@@ -23,6 +24,8 @@ export interface RunOptions {
 	parallel?: number;
 	runId?: string;
 	piBin?: string;
+	/** The herdr binary a dispatch suite's lab server runs (default `herdr` on PATH). */
+	herdrBin?: string;
 	/** Rerun the chosen tasks in an existing run, with this reason: their earlier trials are superseded, not deleted. */
 	rerun?: string;
 	onProgress?: (event: Record<string, unknown>) => void;
@@ -37,6 +40,8 @@ export interface RunMeta {
 	model: string;
 	thinking: string;
 	followUp?: string;
+	/** Dispatch suites: the main's child caps and the pi-herdr-agents it loads. */
+	dispatch?: { herdrAgents: string; maxConcurrent: number; maxLaunches: number; herdr?: string };
 	pi?: string;
 	k: number;
 	tasks: string[];
@@ -100,6 +105,7 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 		model: suite.model,
 		thinking: suite.thinking,
 		...(suite.followUp ? { followUp: suite.followUp } : {}),
+		...(suite.dispatch ? { dispatch: { ...suite.dispatch, herdr: safe(() => execFileSync(options.herdrBin ?? "herdr", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()) } } : {}),
 		pi: safe(() => execFileSync(options.piBin ?? "pi", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()),
 		k: options.k,
 		tasks: tasks.map((t) => t.id),
@@ -131,8 +137,14 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 	let stopped: string | undefined;
 	const records: TrialRecord[] = [];
 	const authFile = join(homedir(), ".pi", "agent", "auth.json");
+	// One Herdr server per run for a dispatch suite; each trial gets a workspace in it.
+	let herdr: HerdrLab | undefined;
+	if (suite.dispatch && queue.length) {
+		herdr = await startHerdrLab({ id, serverEnv: labEnv(options.piBin), bin: options.herdrBin });
+		progress({ herdr: { session: herdr.session, socket: herdr.socket, pid: herdr.pid } });
+	}
 	const one = async (job: (typeof jobs)[number]) => {
-		const spec = { suite, task: job.task, arm: job.arm, n: job.n, runDir, fixture: fixtures.get(job.task.id)!, piBin: options.piBin, authFile };
+		const spec = { suite, task: job.task, arm: job.arm, n: job.n, runDir, fixture: fixtures.get(job.task.id)!, piBin: options.piBin, authFile, herdr };
 		let record = await runTrial(spec);
 		if (!record.valid && record.leak && !stopped) {
 			progress({ rerun: `${job.task.id}/${job.arm}/${job.n}`, reason: record.invalid });
@@ -145,12 +157,16 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 		appendFileSync(join(runDir, "results.jsonl"), `${JSON.stringify(record)}\n`);
 		records.push(record);
 		finished++;
-		progress({ progress: { done: finished, total }, trial: `${job.task.id}/${job.arm}/${job.n}`, outcome: record.outcome, valid: record.valid, cost: record.efficiency.cost, minutes: Math.round(record.efficiency.wallMs / 6000) / 10 });
+		progress({ progress: { done: finished, total }, trial: `${job.task.id}/${job.arm}/${job.n}`, outcome: record.outcome, valid: record.valid, cost: (record.totalEfficiency ?? record.efficiency).cost, minutes: Math.round(record.efficiency.wallMs / 6000) / 10, ...(record.children ? { children: record.children.length } : {}) });
 	};
 	const workers = Array.from({ length: Math.min(parallel, queue.length) }, async () => {
 		while (queue.length && !stopped) await one(queue.shift()!);
 	});
-	await Promise.all(workers);
+	try {
+		await Promise.all(workers);
+	} finally {
+		if (herdr) progress({ herdrStopped: await stopHerdrLab(herdr) });
+	}
 	if (options.rerun === undefined) record.endedAt = new Date().toISOString();
 	if (stopped) record.stopped = stopped;
 	writeFileSync(join(runDir, "run.json"), `${JSON.stringify(record, null, 2)}\n`);

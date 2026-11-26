@@ -53,6 +53,8 @@ export interface ArmSummary {
 	costPerTrial: number;
 	minutesPerTrial: number;
 	costTotal: number;
+	/** Dispatch runs: children per valid trial. */
+	childrenPerTrial?: number;
 }
 export interface TaskRow {
 	task: string;
@@ -93,15 +95,19 @@ export function summarize(all: TrialRecord[], arms: string[], options: { k?: num
 			const rate = taskRate(perTask);
 			if (rate !== undefined) metrics[metric] = rate;
 		}
-		const cost = mine.reduce((s, r) => s + r.efficiency.cost, 0);
+		// A dispatch trial costs its main and its children.
+		const eff = (r: TrialRecord) => r.totalEfficiency ?? r.efficiency;
+		const cost = mine.reduce((s, r) => s + eff(r).cost, 0);
+		const dispatching = mine.some((r) => r.children !== undefined);
 		return {
 			arm,
 			trials: mine.length,
 			invalid: records.filter((r) => r.arm === arm && !r.valid).length,
 			metrics,
 			costPerTrial: mine.length ? cost / mine.length : 0,
-			minutesPerTrial: mine.length ? mine.reduce((s, r) => s + r.efficiency.wallMs, 0) / mine.length / 60_000 : 0,
+			minutesPerTrial: mine.length ? mine.reduce((s, r) => s + eff(r).wallMs, 0) / mine.length / 60_000 : 0,
 			costTotal: cost,
+			...(dispatching ? { childrenPerTrial: mine.reduce((s, r) => s + (r.children?.length ?? 0), 0) / mine.length } : {}),
 		};
 	});
 	const pair = arms.length >= 2 ? ([arms[0], arms[1]] as [string, string]) : undefined;

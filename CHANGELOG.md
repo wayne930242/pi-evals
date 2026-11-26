@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- `pi-evals exp` can test a main agent that dispatches work. A suite with a `dispatch` block in `suite.json` (a vendored pi-herdr-agents checkout, `maxConcurrent`, `maxLaunches`) runs each trial's main as `pi --mode rpc`, with pi-herdr-agents' `subagent` and the suite's model as its only model. The runner waits while children are out, then sends the follow-up once. Children run in a Herdr server private to the run, one workspace per trial, and load the same arm as the main from the trial's agent dir (`settings.json`, `APPEND_SYSTEM.md`, `herdr-agents/config.json`). Suites without `dispatch` run as before.
+- A small extension loaded into every session of a dispatch trial enforces the child limits (no worktrees, no persistent children, no cwd outside the work dir) and records which skills and system prompt each session loaded. A child whose arm differs from its main's makes the trial invalid (`arm_mismatch`). A leak or quota refusal in a child's transcript counts as one in the main's.
+- Dispatch trials record `children`, `childEfficiency`, `totalEfficiency` and `dispatch` (launches, results, blocked launches, most children at once, time waited, processes left over). `exp show` reports cost and agent-minutes including children, and children per trial. When a trial ends or times out, its workspace is closed and its leftover processes are killed.
+- The trial's own session is now read from the top of its session dir, so child artifacts below it are never taken for it.
+
 ## 0.8.1
 
 - `exp check` lets a reference check run as long as the task's `check_timeout_s` (default limit stays 180 s), so tasks with slow verifiers, such as SWE-Bench Pro's Go and JS suites in Docker, can pass the gate.
