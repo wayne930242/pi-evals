@@ -150,3 +150,16 @@ test("the comparison says plainly when there are too few items, and compares onl
 	const enough = workModel({ v: 1, built: t(100), items: many, sessions: [] }, {})!.compare.find((c) => c.dimension === "model")!;
 	assert.deepEqual(enough.verdict, { kind: "cheaper", a: "a", b: "b", by: 0.75 });
 });
+
+test("the items query view and its findings line stay small and say when items are too few", async () => {
+	const { itemsView, itemsFinding } = await import("../src/work/query.ts");
+	const { workModel } = await import("../src/work/model.ts");
+	const dir = sbDir({ T1: { meta: { worker: "a-build", reviewer: "a-review" }, posts: [{ n: 1, at: Date.parse(t(590)), from: "reviewer", tag: "done" }] } });
+	const m = workModel(join_([mainSession(), child(A, "a-build", 3), child(B, "a-review", 1)], dir), {});
+	const text = itemsView(m).join("\n");
+	assert.ok(Buffer.byteLength(text) < 1700, `${Buffer.byteLength(text)} bytes`);
+	assert.match(text, /finished 3 \(handed to subagents 2\)/);
+	assert.match(text, /- "Still going" child on e-build/);
+	assert.match(text, /- "Build A" \$6\.02 \(main \$2\.02 \+ sub \$4\.00\)/);
+	assert.equal(itemsFinding(m), "Work items: 1 open item(s) waiting over 1h, longest 68m on e-build → items", "a long wait on a subagent stands out; three items compare nothing");
+});

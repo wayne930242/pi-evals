@@ -4,6 +4,7 @@ import { overview, readings, value, verdict } from "./report/findings.ts";
 import { words } from "./report/format.ts";
 import { safeName } from "./schema.ts";
 import { trendPair } from "./trends.ts";
+import { itemsFinding } from "./work/query.ts";
 
 export const scriptsDir = fileURLToPath(new URL("../scripts", import.meta.url));
 
@@ -35,6 +36,8 @@ export function findings(m: ReportModel) {
 	const gate = !cov ? "not measured" : !cov.old.files ? "no old files" : cov.notIndexed.files || cov.notIndexed.bytes
 		? `blocked: ${cov.notIndexed.files}/${cov.old.files} old files not indexed` : `all ${cov.old.files} old files indexed`;
 	lines.push(`Cleanup (all projects/dates): ${gate} → coverage`);
+	const work = itemsFinding(m.work);
+	if (work) lines.push(work);
 	const w = m.weekly;
 	if (!w) lines.push("Need two weeks in range for error trends → packages / monitors");
 	else {

@@ -3,8 +3,9 @@ import { coverageInRange, indexedModel, reportPath } from "./ops.ts";
 import { findings } from "./findings.ts";
 import { select } from "./report/findings.ts";
 import type { Rate } from "./model.ts";
+import { itemsView } from "./work/query.ts";
 
-export const VIEWS = ["findings", "skills", "packages", "ask_user", "monitors", "subagents", "process", "cost", "changes", "coverage"] as const;
+export const VIEWS = ["findings", "items", "skills", "packages", "ask_user", "monitors", "subagents", "process", "cost", "changes", "coverage"] as const;
 export type View = (typeof VIEWS)[number];
 export const MAX_BYTES = 1900;
 
@@ -85,6 +86,8 @@ export function query(view: View, options: { since?: string; days?: number; proj
 		body.push(`total $${m.cost.total}; per session ${m.cost.perSession.value === null ? "n/a" : `$${m.cost.perSession.value.toFixed(2)}`} (n=${m.cost.perSession.n}); tokens ${m.totals.tokens}`);
 		body.push("cost of sessions loading skill (not caused by it):");
 		for (const s of m.cost.bySkill.slice(0, 10)) body.push(`${s.skill}: $${s.cost} over ${s.sessions} sessions`);
+	} else if (view === "items") {
+		body.push(...itemsView(m.work));
 	} else if (view === "changes") {
 		body.push("highlighted then newest changes, sessions split at the change time, metric before -> after; flags: small = <20 sessions a side, incomplete = a window runs past the data, confounded = other commits nearby");
 		const { highlighted, folded } = select(m);

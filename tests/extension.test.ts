@@ -191,7 +191,8 @@ test("evals_query answers every view within the size bound, names staleness, and
 		const out = await exec({ view });
 		const text = (out.content[0] as { text: string }).text;
 		assert.ok(Buffer.byteLength(text) <= MAX_BYTES, `${view}: ${Buffer.byteLength(text)} bytes`);
-		assert.ok(!text.includes("PLANTED"), view);
+		// The items view quotes todo titles (the one stored text); nothing else may carry the planted secret.
+		assert.ok(!text.replace(/^(\s*(?:[-*] )?)"[^"\n]*"/gm, "$1").includes("PLANTED"), view);
 	}
 	const skills = (await exec({ view: "skills", project: "demo-repo" })).content[0] as { text: string };
 	assert.match(skills.text, /coding: 1 \/ 1/);
