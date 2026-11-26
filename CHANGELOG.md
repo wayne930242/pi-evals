@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- New CLI command `pi-evals exp` runs controlled, paired experiments: the same tasks under two arms (for example without and with anchorloop) with the same model, so a difference can be put down to the arm. `exp check` confirms a task's base fails its check and its reference passes it 3 of 3; `exp run` runs k trials per task and arm, each with one identical follow-up turn; `exp grade` regrades stored trials after a grader fix; `exp show` gives pass@1, pass^k, process rates, cost and minutes per trial, and B − A with a paired cluster-bootstrap 95% CI over tasks.
+- `exp run --tasks` reruns chosen tasks inside an existing run; the replaced trials are kept, marked superseded.
+- `exp label` writes a blind form page of the trials where the arms disagree; `--answer` stores your verdicts in `labels.jsonl` with `source: "experiment"`, and `exp show` compares them with the graders. The monitoring report leaves these labels out.
+- Answers are graded on every turn's reply, and leaks are read only from paths the trial touched.
+
 ## 0.7.0
 
 - The analysis scripts from labelling and error analysis ship in `scripts/`: `freshness` (is the index current; exits 1 when summaries come from mixed extractor versions), `disagree <rule>` (where the code and your labels disagree, session by session, and which way), `by-version <detector>` (pass rate per package version), `sample <n>` (a stratified, seeded sample of unlabelled sessions to label), `label-import <answers>` (a submitted label form into `labels.jsonl`), and `session-shape <id>` (the ordered events the detectors see, without message text). Output over 2,000 bytes goes to a file under `runs/` in the state dir.
