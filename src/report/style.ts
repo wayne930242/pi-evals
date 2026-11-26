@@ -62,6 +62,7 @@ th,td {text-align:start;padding:7px 12px;border-bottom:1px solid var(--line)}th 
 .tiles {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:18px 0 6px}.tiles .panel {padding:16px 18px}.tiles .big {font-size:27px;margin:6px 0}.tiles .muted {margin:0}
 #work h3 {font-size:22px;margin:30px 0 10px}#work .pair {margin-top:14px}#work .lesson {margin:0}
 table.items td {vertical-align:top}table.items td small {display:block;color:var(--sub);font-size:13px}table.items .item-title {min-width:14em;font-weight:600}table.items .nowrap {white-space:nowrap}
+#work .panel th,#work .panel td {white-space:nowrap}#work .panel td:first-child {white-space:normal}
 .checks {margin-top:18px}.checks h3,.topic .panel h3 {font-size:22px}
 .detail {display:none;padding-bottom:24px;scroll-margin-top:75px}.detail:target {display:block;outline:none}
 body:has(.detail:target) main {display:none}.back {float:right;font-size:15px}

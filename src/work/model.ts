@@ -71,7 +71,8 @@ function compare(items: WorkItem[]): Comparison[] {
 	for (const kind of ["delegated", "self"] as const) {
 		const pool = items.filter((it) => it.kind === kind);
 		if (!pool.length) continue;
-		const dims: Comparison["dimension"][] = kind === "delegated" ? ["role", "model", "anchorloop"] : ["model", "anchorloop"];
+		// Model first: a role split mixes kinds of work (planning and building), so it is the weakest like-with-like.
+		const dims: Comparison["dimension"][] = kind === "delegated" ? ["model", "anchorloop", "role"] : ["model", "anchorloop"];
 		for (const dimension of dims) {
 			const by = new Map<string, WorkItem[]>();
 			for (const it of pool) {
