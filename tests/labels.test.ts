@@ -7,7 +7,7 @@ import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-age
 import { createEvals } from "../src/index.ts";
 import { readLabels } from "../src/labels.ts";
 import { setKnownProjects } from "../src/project.ts";
-import { todo } from "./fixtures.ts";
+import { SECRET, todo } from "./fixtures.ts";
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
@@ -152,4 +152,31 @@ test("a human note is the only free text kept, on one bounded line", async () =>
 	h.answers.push("其他", "沒照做", "第一行\n第二行");
 	await h.run("label");
 	assert.equal(h.raw()[1].note, "第一行 第二行");
+});
+
+test("evals_label records an agent correction with names only and rejects free text", async () => {
+	const h = setup();
+	await h.fire("session_start");
+	await h.fire("input", { text: "/skill:coding" });
+	h.setBranch([todo("2026-11-26T05:00:00.000Z", [{ id: 4, subject: "fix", status: "in_progress" }])]);
+	const tool = h.tool("evals_label");
+	const exec = (params: Record<string, unknown>) => tool.execute("id", params as never, undefined, undefined, h.ctx as never);
+	const out = await exec({ rule: "check_after_last_edit", type: "no_check_run" });
+	assert.match((out.content[0] as { text: string }).text, /check_after_last_edit/);
+	await exec({ rule: "other" });
+	assert.deepEqual(h.raw(), [
+		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "check_after_last_edit", label: "fail", at: "2026-11-26T06:00:00.000Z", annotator: "agent", source: "correction", type: "no_check_run", item: "01a2aaaa-0000-7000-8000-000000000001#4", project: "demo-repo", skills: ["coding"] },
+		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "other", label: "fail", at: "2026-11-26T06:00:00.000Z", annotator: "agent", source: "correction", item: "01a2aaaa-0000-7000-8000-000000000001#4", project: "demo-repo", skills: ["coding"] },
+	]);
+	// A planted string in any field, or any field beyond rule and type, is refused and writes nothing.
+	await assert.rejects(exec({ rule: SECRET }), /rule must be/);
+	await assert.rejects(exec({ rule: "other", type: SECRET }), /type must be/);
+	await assert.rejects(exec({ rule: "other", note: SECRET }), /only rule and type/);
+	await assert.rejects(exec({ rule: "other", label: "pass" }), /only rule and type/);
+	assert.equal(h.raw().length, 2);
+	assert.ok(!readFileSync(h.labelsFile, "utf8").includes("PLANTED"));
+	// Small on purpose: every session pays for the tool's text.
+	const text = tool.description + (tool.promptSnippet ?? "") + JSON.stringify(tool.parameters);
+	assert.ok(tool.description.length <= 200, `description ${tool.description.length}`);
+	assert.ok(Buffer.byteLength(text) < 650, `tool text ${Buffer.byteLength(text)} bytes`);
 });

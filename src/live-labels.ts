@@ -3,7 +3,8 @@
  * their own words) and the `evals_label` tool for the agent (a correction it was given, names only).
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { appendLabel, cleanNote, itemOnBranch, type LabelRow, type Rule, RULES, ruleLabel, undoLast, VERDICT_META, VERDICTS, type Verdict } from "./labels.ts";
+import { Type } from "typebox";
+import { agentLabel, appendLabel, cleanNote, FAILURE_TYPES, type FailureType, itemOnBranch, type LabelRow, type Rule, RULES, ruleLabel, undoLast, VERDICT_META, VERDICTS, type Verdict } from "./labels.ts";
 import type { Observed } from "./observer.ts";
 import { context } from "./ops.ts";
 import { projectKey } from "./project.ts";
@@ -60,6 +61,27 @@ export function liveLabels(pi: ExtensionAPI, options: { env: Env; now: () => num
 		appendLabel(w.file, row);
 		say(`pi-evals：已記下「${ruleLabel(rule, "zh")}」${VERDICT_META[verdict].zh}${row.item ? `，進行中的待辦 ${row.item}` : ""}${row.note ? "，附說明" : ""}；/evals label undo 可撤銷。`);
 	}
+
+	pi.registerTool({
+		name: "evals_label",
+		label: "Evals Label",
+		description: "Log that the user corrected how you worked: rule = the process rule broken, or other; type = the kind of slip. Names only.",
+		promptSnippet: "When the user corrects how you worked (skipped a check, wrong order, ignored a rule), log it once",
+		parameters: Type.Object(
+			{
+				rule: Type.Unsafe<Rule>({ type: "string", enum: [...RULES] }),
+				type: Type.Optional(Type.Unsafe<FailureType>({ type: "string", enum: [...FAILURE_TYPES] })),
+			},
+			{ additionalProperties: false },
+		),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const { rule, type } = agentLabel(params);
+			const w = where(ctx);
+			const skills = observed.skills();
+			appendLabel(w.file, { session_id: w.session, evaluation_name: rule, label: "fail", at: w.at, annotator: "agent", source: "correction", type, item: w.item, project: w.project, skills: skills.length ? skills : undefined });
+			return { content: [{ type: "text", text: `logged correction: ${rule}${type ? ` (${type})` : ""}` }], details: { rule, type } };
+		},
+	});
 
 	return { command };
 }
