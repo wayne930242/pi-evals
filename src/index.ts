@@ -1,11 +1,12 @@
 /**
- * pi-evals: the live observer, the `/evals` command (status, extract, report, mark, label), and the `evals_query` and `evals_label` tools.
+ * pi-evals: the live observer, the `/evals` command (status, extract, report, mark, label), `/ask-ai`, and the `evals_query` and `evals_label` tools.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { askAi } from "./ask-ai.ts";
 import { scriptsDir } from "./findings.ts";
 import { liveLabels } from "./live-labels.ts";
 import { observe } from "./observer.ts";
@@ -44,6 +45,7 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		const ctx0 = context(env);
 		const observed = observe(pi, { layout: ctx0.layout, home: ctx0.home, now: options.now });
 		const labels = liveLabels(pi, { env, now: options.now ?? Date.now, observed });
+		askAi(pi, { env, now: options.now ?? Date.now });
 		let settingsWarned = false;
 		pi.on("session_start", (_event, ctx) => {
 			if (settingsWarned || !ctx0.settings.error) return;

@@ -9,6 +9,7 @@ import { agentLabel, appendLabel, cleanNote, FAILURE_TYPES, type FailureType, it
 import type { Observed } from "./observer.ts";
 import { context } from "./ops.ts";
 import { projectKey } from "./project.ts";
+import { turnWindow } from "./turn-window.ts";
 
 type Env = Record<string, string | undefined>;
 type Ctx = Pick<ExtensionCommandContext, "cwd" | "sessionManager">;
@@ -29,33 +30,8 @@ export function promptFor(words: string): string {
 
 export function liveLabels(pi: ExtensionAPI, options: { env: Env; now: () => number; observed: Observed }) {
 	const { env, now, observed } = options;
-	/** The user's words waiting for their turn to start, and the turn that may speak for the user. */
-	let waiting: { session: string; prompt: string; note?: string } | undefined;
-	let speaking: { session: string; prompt: string; note?: string } | undefined;
-	const textOf = (content: unknown) =>
-		typeof content === "string" ? content : Array.isArray(content) ? content.map((p) => (p && typeof p === "object" && typeof (p as { text?: unknown }).text === "string" ? (p as { text: string }).text : "")).join("") : "";
-	const start = (text: string | undefined) => {
-		if (waiting && text === waiting.prompt) {
-			speaking = { ...waiting };
-			waiting = undefined;
-		}
-	};
-	pi.on("before_agent_start", (event) => start((event as { prompt?: string }).prompt));
-	// A prompt queued behind a running turn starts its own run without before_agent_start: its user message opens it.
-	pi.on("message_end", (event) => {
-		const message = (event as { message?: { role?: string; content?: unknown } }).message;
-		if (message?.role !== "user") return;
-		const text = textOf(message.content);
-		// Another message from the user in the same run is not part of the words the agent is formatting.
-		if (speaking && text !== speaking.prompt) speaking = undefined;
-		start(text);
-	});
-	pi.on("agent_end", () => {
-		speaking = undefined;
-	});
-	pi.on("session_start", () => {
-		waiting = speaking = undefined;
-	});
+	/** The turn that may speak for the user: the one the user's words started. */
+	const speaking = turnWindow<{ note?: string }>(pi);
 	const where = (ctx: Ctx) => {
 		const c = context(env);
 		const session = ctx.sessionManager.getSessionId();
@@ -83,8 +59,9 @@ export function liveLabels(pi: ExtensionAPI, options: { env: Env; now: () => num
 			note = words.slice(2).join(" ");
 			if (!rule || !verdict) {
 				const text = cleanNote(words.join(" "))!;
-				waiting = { session: w.session, prompt: promptFor(text), note: text };
-				pi.sendUserMessage(waiting.prompt, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
+				const prompt = promptFor(text);
+				speaking.arm({ session: w.session, prompt, data: { note: text } });
+				pi.sendUserMessage(prompt, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
 				return say(`pi-evals：已把你的話交給代理人，請它整理成標記${ctx.isIdle() ? "" : "（等目前的工作告一段落）"}；它會回報記了什麼，不對就用 /evals label undo 撤銷。`);
 			}
 		} else {
@@ -122,7 +99,7 @@ export function liveLabels(pi: ExtensionAPI, options: { env: Env; now: () => num
 		),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			const session = ctx.sessionManager.getSessionId();
-			const voice = speaking?.session === session ? speaking : undefined;
+			const voice = speaking.current(session)?.data;
 			const { rule, label, type, onBehalf } = agentLabel(params, !!voice);
 			const w = where(ctx);
 			if (onBehalf) {

@@ -83,6 +83,8 @@ export interface Layout {
 	changes: string;
 	marks: string;
 	labels: string;
+	/** One row per /ask-ai, never the question. */
+	asks: string;
 	status: string;
 	reports: string;
 	/** Joined work items (what the report reads), their records, and the lines-changed cache. */
@@ -103,6 +105,7 @@ export function layout(state = stateDir()): Layout {
 		changes: join(state, "changes.jsonl"),
 		marks: join(state, "marks.jsonl"),
 		labels: join(state, "labels.jsonl"),
+		asks: join(state, "asks.jsonl"),
 		status: join(state, "index", "status.json"),
 		reports: join(state, "reports"),
 		items: join(state, "index", "items.json"),

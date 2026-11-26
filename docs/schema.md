@@ -82,6 +82,18 @@ With a date or project filter, a row belongs to the range by its session's start
 A range without an end date the user gave ends at the last extract, but a row of a session not indexed yet is not cut there, so a label given after the last extract still shows.
 The report counts the `live-prompt` rows among 當下標 and says how many there are.
 
+## Asks
+
+`asks.jsonl` in the state dir gets one row per `/ask-ai`, appended when the command runs and read at every report and query:
+
+```json
+{ "session_id": "01a2…", "at": "2026-11-26T06:00:00Z", "kind": "ask_ai", "project": "demo-repo", "item": "MP-1234" }
+```
+
+`item` is the todo item in progress, keyed as in labels, and is absent when none is.
+The row holds no question text, and the agent's answer is not stored anywhere.
+The report counts asks in range (scoped like live labels) and how many had a human label in the same session at most 30 minutes after the ask; the `labels` view of `evals_query` gives the same two numbers.
+
 ## Change timeline
 
 `changes.jsonl`, rebuilt by every extract, one change per line:

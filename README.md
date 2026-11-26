@@ -55,6 +55,23 @@ The observer loads in every session, subagents included.
 A label records the session, the time, and the key of the todo item in progress, if any (its `uid`, else `<session>#<id>`, as work items are keyed).
 It reaches the report and `evals_query` at their next read, without an extract.
 
+### `/ask-ai`: get an answer before the agent acts
+
+| Command | What it does |
+| --- | --- |
+| `/ask-ai <your question>` | Has the agent answer your question now, e.g. `/ask-ai 你剛剛有照並行設計流程嗎？`. With no question it shows the usage. |
+
+Sometimes an agent hears a question as a reproach and starts re-planning, so the moment to label how it worked passes.
+`/ask-ai` sends your question with a short instruction: answer first, in your language; read only what the answer needs; change nothing, start no work and dispatch nothing; if the question is about how it worked, say what happened and whether that followed the rule; end with at most one line of suggested next step, and wait.
+If the agent is working, the question goes in after its current tool calls.
+
+Until that run ends, or you send another message, these tools are refused with a one-line reason telling the agent to answer first: `write`, `edit`, `subagent`, `boss_pair`, `MonitorCreate`, `LoopCreate`, `call_tower`, `todo` (except `list` and `get`), and `intercom` (`send`, `ask` and `handover`).
+`bash`, `read` and every other tool still run, so the agent can look things up.
+Only you can type the command; agents cannot call it.
+
+pi-evals records only that you asked (session, time, project and the todo item in progress), never the question or the answer.
+The report's 「你的標記」 section says how many times you asked and how many of those you followed with a label in the same session within 30 minutes.
+
 The same operations run from a shell, where extraction defaults to one fewer worker than available CPUs (at least one, at most eight).
 On either surface, `--workers 0` reads the files sequentially without worker threads:
 
@@ -141,6 +158,7 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
 | `index/lines.json` | Cached `git diff --numstat` line counts between evidence commits. |
 | `changes.jsonl`, `marks.jsonl` | The change timeline and your notes. |
 | `labels.jsonl` | Your labels and agents' corrections, appended one per line ([docs/schema.md](docs/schema.md#labels)). The report shows how often you and the automatic checks agree, split by labels given after the fact and in the moment; `unclear` labels are counted apart. Its 「被糾正」 section counts the corrections by rule, failure type, skill loaded and anchorloop version. |
+| `asks.jsonl` | One row per `/ask-ai`: session, time, project and todo item, without the question ([docs/schema.md](docs/schema.md#asks)). |
 | `reports/report.html`, `reports/model.json` | The report. |
 
 The record format is in [docs/schema.md](docs/schema.md); the decisions behind it are in [docs/design.md](docs/design.md).

@@ -154,6 +154,9 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 	);
 	const lb = m.labels, rule = (r: string) => ruleLabel(r, lang);
 	const pair = (c: { agree: number; n: number }) => (c.n ? `${num(c.agree)} / ${num(c.n)}` : "—");
+	const asked = lb.asks.n
+		? `<p>${L(`You asked with /ask-ai ${num(lb.asks.n)} times; ${num(lb.asks.labelled)} of them were followed within 30 minutes by a label in the same session.`, `你用 /ask-ai 問了 ${num(lb.asks.n)} 次，其中 ${num(lb.asks.labelled)} 次在同一段工作裡、30 分鐘內接著標記了。`)}</p>`
+		: "";
 	const labels = section(
 		"labels",
 		L("Your labels", "你的標記"),
@@ -168,13 +171,13 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 				) +
 				`<p class="muted">${L(`Cannot tell ${num(lb.unclear)}: labels marked unclear are left out of the agreement rate.`, `看不出來 ${num(lb.unclear)}：標成「看不出來」的不算進一致比例。`)}${
 					lb.noCode ? L(` ${num(lb.noCode)} labels have no code verdict to compare: the session is not extracted yet (run /evals extract), or the rule did not apply to it.`, `另有 ${num(lb.noCode)} 筆沒有程式判斷可比：那段工作還沒整理（執行 /evals extract 後就能比），或這條規則不適用於它。`) : ""
-				}${lb.other ? L(` ${num(lb.other)} labels are on "Other", which no code check covers.`, `${num(lb.other)} 筆標在「其他」，沒有程式檢查可比。`) : ""}</p>` + lesson(cards.labelTiming, L)
+				}${lb.other ? L(` ${num(lb.other)} labels are on "Other", which no code check covers.`, `${num(lb.other)} 筆標在「其他」，沒有程式檢查可比。`) : ""}</p>` + asked + lesson(cards.labelTiming, L)
 			: `<p>${
 				L(
 					"No labels yet. Type /evals label in any session to say, while the work is in front of you, whether the agent followed a rule.",
 					"還沒有標記。在任何工作階段輸入 /evals label，就能趁工作還在眼前，標記代理人有沒有照規則做。",
 				)
-			}</p>` + lesson(cards.labelTiming, L),
+			}</p>` + asked + lesson(cards.labelTiming, L),
 	);
 	const c = lb.corrections, few = c.n < SMALL_SAMPLE;
 	const corrections = section(

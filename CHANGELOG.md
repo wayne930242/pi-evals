@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+- New command `/ask-ai <question>` has the agent answer you now instead of taking the question as a reproach and starting new work. The question goes in with a short instruction: answer first, in your language, change nothing, start no work, and end with at most one line of suggested next step. While that run lasts (until it ends or you send another message), `write`, `edit`, `subagent`, `boss_pair`, `MonitorCreate`, `LoopCreate`, `call_tower`, `todo` (except `list`/`get`) and `intercom` (`send`/`ask`/`handover`) are refused with a one-line reason; `bash`, `read` and other tools still run.
+- Each ask is recorded in `asks.jsonl` (session, time, project, todo item; never the question or the answer). The report's 「你的標記」 section and the `labels` query view say how many times you asked and how many you followed with a label in the same session within 30 minutes.
+
 ## 0.5.2
 
 - A later human label on the same session, rule and item replaces the earlier one in the report and agreement; `labels.jsonl` keeps both. New `source: "recheck"` for your second look at a label given after the fact (counted as 事後標). Each 「其他」 label stays its own event, and agent corrections are never replaced.

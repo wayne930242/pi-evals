@@ -11,6 +11,7 @@ import { DETECTORS, ERA_START } from "./detectors.ts";
 import { CHANGE_KIND_META, CLOSE_KIND_META, DETECTOR_META, METRICS, NOTICE_META, STALL_KIND_META } from "./meta.ts";
 import { staticOwner } from "./owners.ts";
 import { weeklyRises } from "./trends.ts";
+import { asksModel } from "./asks.ts";
 import { labelsModel } from "./labels.ts";
 import { ANCHORLOOP, type ItemsFile } from "./work/join.ts";
 import { workModel } from "./work/model.ts";
@@ -180,6 +181,8 @@ export function buildModel(options: {
 	filter: Filter;
 	windowDays: number;
 	labelsFile: string;
+	/** `asks.jsonl`, when the caller has one. */
+	asksFile?: string;
 	sessionEvalsFile: string;
 	coverage?: Coverage;
 	/** Joined work items (`index/items.json`), when built. */
@@ -215,8 +218,9 @@ export function buildModel(options: {
 	const selected = projectRows.filter(r => inRange(r.s)), children = selected.filter(r => r.k);
 	const scoped = Boolean(filter.since || filter.until || filter.project);
 	const hasSessionIds = selected.every(r => r.id !== undefined);
-	const labelIds = scoped && existsSync(options.labelsFile) ? new Set(selected.flatMap(r => r.id ? [r.id] : [])) : undefined;
+	const labelIds = scoped && (existsSync(options.labelsFile) || (!!options.asksFile && existsSync(options.asksFile))) ? new Set(selected.flatMap(r => r.id ? [r.id] : [])) : undefined;
 	const indexedIds = labelIds && new Set(options.rows.flatMap(r => r.id ? [r.id] : []));
+	const labelScope = { ...filter, until: options.openEnd ? undefined : filter.until, selected: labelIds, indexed: indexedIds };
 	const calls = Object.values(total.tools).reduce((s, t) => s + t.calls, 0);
 	const errors = Object.values(total.tools).reduce((s, t) => s + t.errors, 0);
 	const tokens = total.usage.input + total.usage.output + total.usage.cacheRead + total.usage.cacheWrite;
@@ -324,7 +328,8 @@ export function buildModel(options: {
 			.filter((c) => inRange(c.at))
 			.map((c) => ({ ...c, impact: index.range.start && c.at > index.range.start ? impactFromRows(projectRows, c, sortedChanges, options.windowDays, index.range, owner) : null })),
 		labels: {
-			...labelsModel(options.labelsFile, options.sessionEvalsFile, { ...filter, until: options.openEnd ? undefined : filter.until, selected: labelIds, indexed: indexedIds }, (at) => versionAt(sortedChanges, ANCHORLOOP, at)),
+			...labelsModel(options.labelsFile, options.sessionEvalsFile, labelScope, (at) => versionAt(sortedChanges, ANCHORLOOP, at)),
+			asks: asksModel(options.asksFile, options.labelsFile, labelScope),
 			needsIndex: !!labelIds && !hasSessionIds,
 		},
 		coverage: options.coverage ?? null,

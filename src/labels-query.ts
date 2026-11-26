@@ -16,6 +16,7 @@ export function labelsView(m: ReportModel): string[] {
 		`human: after the fact ${l.bySource.batch} (${l.sessions.batch} sessions), in the moment ${l.bySource.live} (${l.sessions.live} sessions${l.fromWords ? `; ${l.fromWords} formatted by the agent from your words` : ""}); unclear ${l.unclear}; no code verdict ${l.noCode}; on other ${l.other}`,
 		"code vs human, agreed/compared (after the fact; in the moment):",
 	];
+	if (l.asks.n) out.splice(2, 0, `/ask-ai questions: ${l.asks.n}; followed by a label in the same session within 30 min: ${l.asks.labelled}`);
 	for (const a of l.agreement) out.push(`${a.detector}: ${ratio(a)} (${ratio(a.bySource.batch)}; ${ratio(a.bySource.live)})`);
 	out.push(`corrections the agent logged (not all mistakes): ${c.n} in ${c.sessions} sessions${c.n && c.n < SMALL_SAMPLE ? `; small (<${SMALL_SAMPLE}), a hint not a trend` : ""}`);
 	if (c.n) {

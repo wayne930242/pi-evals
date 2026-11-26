@@ -80,7 +80,7 @@ function snapshot(env?: Env, withCoverage = true) {
 		const filter = rangeFilter(input, index.lastExtract ?? now.toISOString(), preset);
 		// A range ends at the last extract unless the user ends it; a label given since then has no session in the index yet.
 		return buildModel({ index, rows, changes, comparisons, filter, now, windowDays: ctx.settings.impactWindowDays, openEnd: input.until === undefined,
-			labelsFile: ctx.layout.labels, sessionEvalsFile: ctx.layout.sessionEvals, coverage: cov?.(filter), work });
+			labelsFile: ctx.layout.labels, asksFile: ctx.layout.asks, sessionEvalsFile: ctx.layout.sessionEvals, coverage: cov?.(filter), work });
 	} };
 }
 export function indexedModel(filter: RangeInput, env?: Env, withCoverage = true) {
