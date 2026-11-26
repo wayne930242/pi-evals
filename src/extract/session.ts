@@ -10,10 +10,15 @@ import { dayOf } from "../paths.ts";
 import { projectKey } from "../project.ts";
 import { type Attrs, type EvalRecord, NAMES, record, safeName, type SkillTrigger, spanId, traceId } from "../schema.ts";
 import { skillFromPath, skillsFromBlocks, skillsFromCatalog, skillsFromCommand } from "../skills.ts";
+import { WorkTracker } from "../work/track.ts";
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const CHILD_FILE = new RegExp(`_(${UUID})-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{4}\\.jsonl$`);
 const BRIEF_PARENT = new RegExp(`/artifacts/(${UUID})/context/`);
+/** The subagent name in a brief path `…/context/<name>-<YYYY-MM-DDTHH-MM-SS>.md`. */
+const BRIEF_NAME = new RegExp(`/artifacts/${UUID}/context/([A-Za-z0-9_.-]+?)-\\d{4}-\\d{2}-\\d{2}T[0-9-]+\\.md`);
+/** Question tools: the main waits on a person while one runs. */
+const HUMAN_WAIT = new Set(["ask_user_question", "ask_user", "secret_drop"]);
 const ASK_TOOLS = new Set(["ask_user_question", "ask_user"]);
 
 interface PendingCall {
@@ -63,6 +68,9 @@ export class SessionReader {
 	private notices: SessionSummary["notices"] = {};
 	private firstUser = true;
 	private model?: string;
+	private childName?: string;
+	private cwd?: string;
+	private work = new WorkTracker();
 	readonly logicalId?: string;
 	private readonly home: string;
 	private readonly emit: (r: EvalRecord) => void;
@@ -101,6 +109,7 @@ export class SessionReader {
 		if (type === "session") return this.header(entry);
 		if (!this.start && ts) this.start = ts;
 		const kind = this.tracker.feed(entry);
+		this.work.entry(entry, ts);
 		if (type === "model_change") {
 			this.model = safeName(`${str(entry.provider) ?? "?"}/${str(entry.modelId) ?? "?"}`);
 		} else if (type === "compaction") {
@@ -122,6 +131,8 @@ export class SessionReader {
 		this.sessionId = safeName(str(entry.id) ?? "");
 		this.start = str(entry.timestamp) ?? this.start;
 		this.project = safeName(projectKey(str(entry.cwd), this.home));
+		const cwd = str(entry.cwd);
+		if (cwd && safeName(cwd) === cwd) this.cwd = cwd;
 	}
 
 	private system(message: Obj) {
@@ -134,8 +145,11 @@ export class SessionReader {
 		const text = textOf(message.content);
 		if (this.firstUser) {
 			this.firstUser = false;
-			const parent = text.slice(0, 2000).match(BRIEF_PARENT)?.[1];
+			const head = text.slice(0, 2000);
+			const parent = head.match(BRIEF_PARENT)?.[1];
 			if (parent && this.logicalId) this.parentId = parent;
+			const name = head.match(BRIEF_NAME)?.[1];
+			if (name && this.logicalId) this.childName = safeName(name);
 		}
 		const anchor = str(entry.id) ?? ts;
 		this.closeTrace();
@@ -188,6 +202,7 @@ export class SessionReader {
 		day.usage.calls += 1;
 		bump(day.models, model);
 		this.cost += u.cost;
+		this.work.assistant(ts, u.cost, message.stopReason);
 		this.tokens += num(usage.totalTokens) || u.input + u.output + u.cacheRead + u.cacheWrite;
 		if (this.traceUsage) {
 			this.traceUsage.input += u.input;
@@ -257,8 +272,20 @@ export class SessionReader {
 			attrs["gen_ai.request.model"] = model;
 			attrs["pi.subagent.logical_id"] = child;
 			bump(day.subagents, `${role}|${model}`);
-			if (child) this.spawned.push({ id: child, role, model });
+			if (child) {
+				const name = str(details.name) ? safeName(details.name) : undefined;
+				const item = str(details.item) ? safeName(details.item) : undefined;
+				this.spawned.push({ id: child, role, model, name });
+				this.work.launch({ id: child, name, role, model, item, at: ts });
+			}
 		}
+		if (!isError && call && HUMAN_WAIT.has(name)) this.work.wait(call.ts, ts, "human");
+		if (!isError && name === "subagent_resume" && str(details.name)) this.work.child(ts, String(details.name), "resume");
+		if (!isError && name === "boss_pair" && str(details.thread)) {
+			const opt = (v: unknown) => (str(v) ? safeName(v) : undefined);
+			this.work.pair({ thread: safeName(details.thread), worker: opt(details.worker), reviewer: opt(details.reviewer), item: opt(details.item), at: ts });
+		}
+		if (!isError && name === "boss_wrap") this.work.wrap(ts, details.wrapped === true);
 		if (call?.monitor && !isError) {
 			const monitorId = textOf(message.content).concat(" ", str(details.summary) ?? "").match(/Monitor #(\d+)/)?.[1];
 			day.monitors.started += 1;
@@ -300,6 +327,8 @@ export class SessionReader {
 		const type = entry.customType;
 		if (type === "pi-herdr-agents:declared-skills") {
 			for (const skill of skillsFromBlocks(textOf(entry.content))) this.skillLoad(skill, "declared", ts);
+		} else if (type === "subagent_result" && str(obj(entry.details).name)) {
+			this.work.child(ts, String(obj(entry.details).name), "result");
 		} else if (kind) {
 			bump(this.notices as Record<string, number>, kind);
 			bump(this.day(ts).notices, kind);
@@ -417,6 +446,8 @@ export class SessionReader {
 			kind: this.logicalId ? "subagent" : "interactive",
 			logicalId: this.logicalId,
 			parentId: this.parentId,
+			childName: this.childName,
+			cwd: this.cwd,
 			spawned: this.spawned,
 			cost: this.cost,
 			tokens: this.tokens,
@@ -425,6 +456,8 @@ export class SessionReader {
 			notices: this.notices,
 			days: this.days,
 		};
+		const work = this.work.finish(this.sessionId, !!this.logicalId);
+		if (work) summary.work = work;
 		return { summary, catalog: this.catalog };
 	}
 }

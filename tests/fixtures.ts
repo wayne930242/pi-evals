@@ -23,7 +23,7 @@ export function sessionLines(spec: SessionSpec): string {
 	const lines = [{ type: "session", version: 3, id: spec.id, timestamp: spec.start, cwd: spec.cwd }];
 	for (const e of spec.entries(t)) {
 		const eid = (e.id as string) ?? id();
-		lines.push({ ...e, id: eid, parentId: parent } as never);
+		lines.push({ ...e, id: eid, parentId: "parentId" in e ? e.parentId : parent } as never);
 		parent = eid;
 	}
 	return `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`;
@@ -51,6 +51,8 @@ export const result = (ts: string, callId: string, toolName: string, opts: { isE
 	},
 });
 export const custom = (ts: string, customType: string, data: unknown) => ({ type: "custom", timestamp: ts, customType, data });
+export const todo = (ts: string, tasks: Record<string, unknown>[], extra: Record<string, unknown> = {}) => ({ type: "custom", timestamp: ts, customType: "todo/v1", data: { v: 1, tasks, nextId: tasks.reduce((m, t) => Math.max(m, Number(t.id) + 1), 1) }, ...extra });
+export const stop = (ts: string, cost = 0) => ({ ...assistant(ts, [{ type: "text", text: "done" }], cost), message: { ...assistant(ts, [], cost).message, content: [{ type: "text", text: "done" }], stopReason: "stop" } });
 export const customMessage = (ts: string, customType: string, content: string, details?: unknown) => ({ type: "custom_message", timestamp: ts, customType, content, display: false, details });
 
 /** A session in the anchorloop 3.x era that touches every extracted feature, with the secret planted in every text field. */

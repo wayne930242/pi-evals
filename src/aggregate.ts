@@ -1,6 +1,7 @@
 /** Additive per-day aggregates. A session summary holds one per UTC day; the index sums them by day and project. */
 import type { DetectorName, NoticeKind } from "./detectors.ts";
 import type { Label } from "./schema.ts";
+import type { SessionWork } from "./work/track.ts";
 
 export interface ToolAgg {
 	calls: number;
@@ -146,8 +147,14 @@ export interface SessionSummary {
 	logicalId?: string;
 	/** Parent session id, when the brief's artifact path or a dispatch ledger names it. */
 	parentId?: string;
-	/** Logical ids of the subagents this session launched, with the role and model it asked for. */
-	spawned: { id: string; role: string; model: string }[];
+	/** Logical ids of the subagents this session launched, with the role and model it asked for, and its name. */
+	spawned: { id: string; role: string; model: string; name?: string }[];
+	/** A subagent's own name, from its brief path. */
+	childName?: string;
+	/** Working directory, when it is name-shaped: where to look for evidence commits. Internal; never in a record. */
+	cwd?: string;
+	/** Work items and what the join needs about them (todo transitions, cost, idle gaps, launches). */
+	work?: SessionWork;
 	cost: number;
 	tokens: number;
 	toolCalls: number;
