@@ -149,6 +149,8 @@ export interface SessionSummary {
 	parentId?: string;
 	/** Logical ids of the subagents this session launched, with the role and model it asked for, and its name. */
 	spawned: { id: string; role: string; model: string; name?: string }[];
+	/** The last model the session used. */
+	model?: string;
 	/** A subagent's own name, from its brief path. */
 	childName?: string;
 	/** Working directory, when it is name-shaped: where to look for evidence commits. Internal; never in a record. */

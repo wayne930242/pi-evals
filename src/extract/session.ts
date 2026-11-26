@@ -446,6 +446,7 @@ export class SessionReader {
 			kind: this.logicalId ? "subagent" : "interactive",
 			logicalId: this.logicalId,
 			parentId: this.parentId,
+			model: this.model,
 			childName: this.childName,
 			cwd: this.cwd,
 			spawned: this.spawned,

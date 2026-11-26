@@ -127,7 +127,7 @@ test("a question held open two minutes or more is a human stall; shorter idles a
 			stop(t(910)),
 		],
 	});
-	assert.deepEqual(w.gaps.map((g) => [g.kind, g.on, g.via, (Date.parse(g.end) - Date.parse(g.start)) / 1000]), [["human", undefined, "ask", 198], ["peer", "01a20d4d", "idle", 340], ["ci", undefined, "idle", 290]]);
+	assert.deepEqual(w.gaps.map((g) => [g.kind, g.on, g.via, (Date.parse(g.end) - Date.parse(g.start)) / 1000]), [["human", undefined, "ask", 198], ["peer", "01a20d4d-548e", "idle", 340], ["ci", undefined, "idle", 290]]);
 	assert.equal(w.idleSince, "2026-11-25T10:15:10.000Z", "the last turn ended and nothing woke it");
 });
 

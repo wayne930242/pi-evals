@@ -85,6 +85,10 @@ export interface Layout {
 	labels: string;
 	status: string;
 	reports: string;
+	/** Joined work items (what the report reads), their records, and the lines-changed cache. */
+	items: string;
+	itemRecords: string;
+	lines: string;
 }
 
 export function layout(state = stateDir()): Layout {
@@ -101,6 +105,9 @@ export function layout(state = stateDir()): Layout {
 		labels: join(state, "labels.jsonl"),
 		status: join(state, "index", "status.json"),
 		reports: join(state, "reports"),
+		items: join(state, "index", "items.json"),
+		itemRecords: join(state, "index", "workitems.jsonl"),
+		lines: join(state, "index", "lines.json"),
 	};
 }
 

@@ -7,32 +7,26 @@
  * the branch that ends with the last snapshot in the file wins, and each task id gets a new item whenever it reappears.
  * Only the subject leaves this module as text, cut to 80 characters (`titleOf`); every other string is a name.
  */
-import { safeName } from "../schema.ts";
+import { safeName, titleOf } from "../schema.ts";
+
+export { titleOf };
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 
-export const TITLE_MAX = 80;
 /** A main idle this long or longer is a stall. */
 export const STALL_MS = 120_000;
 
 export type StallKind = "human" | "peer" | "child" | "timer" | "ci" | "device";
 export type ItemStatus = "pending" | "in_progress" | "completed" | "deleted";
 
-/** The todo subject as a one-line title of at most 80 characters: the only source text pi-evals stores. */
-export function titleOf(subject: unknown): string {
-	if (typeof subject !== "string") return "";
-	const line = subject.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
-	return Array.from(line).slice(0, TITLE_MAX).join("");
-}
-
 export interface Gap {
 	/** ISO start (the main's turn ended, or a blocking question was asked) and end (what woke it). */
 	start: string;
 	end: string;
 	kind: StallKind;
-	/** Who or what, when the waking entry names it: a subagent name, a peer's session8, or (from the sb ledger) `W12`, `L340`, `T5`. */
+	/** Who or what, when the waking entry names it: a subagent name, a peer's session (first 13 characters), or (from the sb ledger) `W12`, `L340`, `T5`. */
 	on?: string;
 	/** `ask` when the main sat inside a question tool, else `idle`. */
 	via: "idle" | "ask";
@@ -57,7 +51,7 @@ export interface ItemRaw {
 	evidence: number;
 	/** Distinct evidence commit shas, in order. */
 	shas: string[];
-	/** Evidence `ref` values (a tool call id or `child:<subagent id>`). */
+	/** Evidence `ref` values of the form `child:<subagent id>`. */
 	refs: string[];
 	blockedBy: number;
 	/** Main cost inside the active window, split evenly among the items active at the same moment. */
@@ -110,6 +104,7 @@ interface Snapshot {
 	tasks: TaskLite[];
 }
 
+const CHILD_REF = /^child:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STATUSES = new Set(["pending", "in_progress", "completed", "deleted"]);
 
 function liteOf(raw: unknown): TaskLite | undefined {
@@ -122,7 +117,8 @@ function liteOf(raw: unknown): TaskLite | undefined {
 		const sha = str(e.sha);
 		if (sha && /^[0-9a-f]{6,40}$/i.test(sha) && !shas.includes(sha)) shas.push(sha);
 	}
-	const refs = evidence.map((e) => str(e.ref)).filter((r): r is string => !!r && r.length <= 64 && !/\s/.test(r)).map(safeName);
+	// Only a `child:<subagent id>` ref is kept: it joins the child to the item. A tool call id needs no storing.
+	const refs = evidence.map((e) => str(e.ref)).filter((r): r is string => !!r && CHILD_REF.test(r));
 	const uid = str(t.uid);
 	const origin = str(obj(t.origin).session);
 	return {
@@ -184,7 +180,8 @@ export function wakeOf(entry: Obj): { kind: StallKind; on?: string } | undefined
 }
 
 const UUIDISH = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
-const peerName = (id: string) => (UUIDISH.test(id) ? id.slice(0, 8) : safeName(id));
+/** A peer session by its first 13 characters: UUIDv7 sessions started within the same minute share the first 8. */
+const peerName = (id: string) => (UUIDISH.test(id) ? id.slice(0, 13) : safeName(id));
 
 export class WorkTracker {
 	private snaps: Snapshot[] = [];
@@ -367,6 +364,7 @@ export class WorkTracker {
 
 	private step(item: ItemRaw, task: TaskLite, ts: string) {
 		const was = item.status;
+		if (task.uid && item.uid !== task.uid) item.key = item.uid = task.uid;
 		Object.assign(item, { title: task.title || item.title, owner: task.owner ?? item.owner, evidence: task.evidence, shas: task.shas, refs: task.refs, blockedBy: task.blockedBy });
 		if (task.status === was) return;
 		item.status = task.status;

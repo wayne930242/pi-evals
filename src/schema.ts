@@ -4,6 +4,7 @@
  *
  * Privacy is enforced here: every string attribute must look like a name (no spaces, no newlines, bounded length).
  * Anything else is replaced by "redacted", so free text from a transcript cannot reach a record by accident.
+ * The single exception is `pi.item.title`, a todo subject cut to one line of 80 characters.
  */
 import { createHash } from "node:crypto";
 
@@ -37,11 +38,23 @@ export function safeName(value: unknown): string {
 	return NAME.test(value) ? value : "redacted";
 }
 
+export const TITLE_MAX = 80;
+/** The one attribute that may hold source text: a work item's todo subject, as one line of at most 80 characters. */
+export const TITLE_ATTR = "pi.item.title";
+
+/** The todo subject as a one-line title of at most 80 characters (the boss's rule: 「顯示，最多 80 字」). */
+export function titleOf(subject: unknown): string {
+	if (typeof subject !== "string") return "";
+	const line = subject.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+	return Array.from(line).slice(0, TITLE_MAX).join("");
+}
+
 function clean(attrs: Attrs): Record<string, AttrValue> {
 	const out: Record<string, AttrValue> = {};
 	for (const [key, value] of Object.entries(attrs)) {
 		if (value === undefined) continue;
-		if (typeof value === "string") out[key] = safeName(value);
+		if (key === TITLE_ATTR) out[key] = titleOf(value);
+		else if (typeof value === "string") out[key] = safeName(value);
 		else if (Array.isArray(value)) out[key] = value.slice(0, 200).map(safeName);
 		else if (typeof value === "number") {
 			if (Number.isFinite(value)) out[key] = value;
@@ -78,6 +91,8 @@ export const NAMES = {
 	tools: "pi.tools.snapshot",
 	skills: "pi.skills.available",
 	compaction: "pi.compaction",
+	workitem: "pi.workitem",
+	stall: "pi.stall",
 } as const;
 
 export type SkillTrigger = "read" | "slash" | "declared" | "bash";

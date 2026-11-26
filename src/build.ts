@@ -12,6 +12,7 @@ import type { Checkpoint } from "./extract/run.ts";
 import { dayOf, type Layout, type Settings } from "./paths.ts";
 import { type EvalRecord, NAMES, traceId } from "./schema.ts";
 import { liveFiles, readRecords } from "./store.ts";
+import { ANCHORLOOP, joinWork, Lines, sbDirOf, writeWork } from "./work/join.ts";
 
 export interface DaysIndex {
 	v: 1;
@@ -28,7 +29,7 @@ export interface DaysIndex {
 	range: { start: string; end: string };
 }
 
-export const ANCHORLOOP_PACKAGES = ["pi-anchorloop", "pi-aaaav", "aaaav"];
+export const ANCHORLOOP_PACKAGES = ANCHORLOOP;
 
 function atomicWrite(file: string, text: string) {
 	mkdirSync(dirname(file), { recursive: true });
@@ -245,6 +246,13 @@ export function buildIndex(options: { layout: Layout; settings: Settings; checkp
 	atomicWrite(layout.days, JSON.stringify(index));
 	atomicWrite(layout.sessionRows, JSON.stringify(rows));
 	atomicWrite(layout.sessionEvals, JSON.stringify(sessionEvals));
+	const now = options.now?.() ?? new Date();
+	try {
+		const work = joinWork({ summaries, changes, sbDir: sbDirOf(options.agentDir), repos: options.settings.changeRepos, lines: new Lines(layout.lines, now), now });
+		writeWork(layout, work);
+	} catch (error) {
+		errors.push(`work items: ${error instanceof Error ? error.message : String(error)}`);
+	}
 	return { index, changes, errors };
 }
 
