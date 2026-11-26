@@ -133,6 +133,32 @@ test("extract is incremental and coverage counts old files by whether the index 
 	assert.equal(third.stats.changed, 1);
 });
 
+test("an extract killed after an extractor bump leaves the files it did not reach stale, and the next run re-reads them", async () => {
+	const { EXTRACTOR_VERSION, loadCheckpoint, saveCheckpoint } = await import("../src/extract/run.ts");
+	const home = mkdtempSync(join(tmpdir(), "pi-evals-kill-"));
+	const ids = ["s-1", "s-2", "s-3", "s-4"];
+	const agentDir = writeAgentDir(ids.map((id, i) => ({ dir: "--a--", file: `2026-11-24T0${i}-00-00-000Z_${id}.jsonl`, spec: richSession(home, id) })));
+	const roots = [join(agentDir, "sessions")];
+	const lay = layout(join(home, "state"));
+	const evalsOf = (cp: { files: Record<string, { summary: { evals: unknown } }> }) => JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(cp.files).map(([p, f]) => [p, f.summary.evals]))));
+	const clean = evalsOf((await extract({ roots, layout: lay, home, workers: 0 })).checkpoint);
+	// The state an older extractor left: every summary from version N-1, with results the current one no longer gives.
+	const old = loadCheckpoint(lay.checkpoint);
+	old.extractor = EXTRACTOR_VERSION - 1;
+	for (const f of Object.values(old.files)) {
+		f.extractor = EXTRACTOR_VERSION - 1;
+		f.summary.evals = { anchor_before_first_edit: { label: "fail", explanation: "stale" } };
+	}
+	saveCheckpoint(lay.checkpoint, old);
+	const stop = new AbortController();
+	const killed = await extract({ roots, layout: lay, home, workers: 0, signal: stop.signal, onProgress: (done) => void (done === 1 && stop.abort()) });
+	assert.equal(killed.stats.changed, ids.length);
+	const next = await extract({ roots, layout: lay, home, workers: 0 });
+	assert.equal(next.stats.changed, ids.length - 1, "every file the killed run did not reach is read again");
+	assert.deepEqual(evalsOf(next.checkpoint), clean, "the results equal a clean rebuild");
+	assert.equal((await extract({ roots, layout: lay, home, workers: 0 })).stats.changed, 0);
+});
+
 test("F001: impact and version follow the session start against the change time, not the calendar day", async () => {
 	const { impactFromRows } = await import("../src/model.ts");
 	const { versionAt } = await import("../src/changes.ts");

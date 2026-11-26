@@ -15,9 +15,15 @@ export interface FileEntry {
 	key: string;
 	month: string;
 	summary: SessionSummary;
+	/**
+	 * The extractor version that wrote this summary. A summary is current only when it equals EXTRACTOR_VERSION, so an
+	 * extract stopped after a version bump leaves the files it did not reach stale for the next run. Entries from 0.6.0
+	 * and before carry none and are read again.
+	 */
+	extractor?: number;
 }
 
-/** Bump when extraction changes what it derives; a checkpoint from another version re-reads every file. */
+/** Bump when extraction changes what it derives; every summary written by another version is read again. */
 export const EXTRACTOR_VERSION = 5;
 
 export interface Checkpoint {
@@ -141,12 +147,11 @@ export async function extract(options: {
 	const started = Date.now();
 	const checkpoint = loadCheckpoint(options.layout.checkpoint);
 	const files = listSessionFiles(options.roots);
-	const rereadAll = checkpoint.extractor !== EXTRACTOR_VERSION;
+	// The checkpoint-wide field only says which version last ran; staleness is per entry (an interrupted run saves both kinds).
 	checkpoint.extractor = EXTRACTOR_VERSION;
 	const changed = files.filter((f) => {
 		const known = checkpoint.files[f.path];
-		if (rereadAll) return true;
-		return !known || known.size !== f.size || known.mtimeMs !== f.mtimeMs;
+		return !known || known.extractor !== EXTRACTOR_VERSION || known.size !== f.size || known.mtimeMs !== f.mtimeMs;
 	});
 	const stats: ExtractStats = { files: files.length, changed: changed.length, failed: 0, bytes: 0, records: 0, ms: 0, errors: [] };
 	const byPath = new Map(changed.map((f) => [f.path, f]));
@@ -175,7 +180,7 @@ export async function extract(options: {
 			} else {
 				stats.records += result.records;
 				const key = fileKey(file.path);
-				checkpoint.files[file.path] = { size: file.size, mtimeMs: file.mtimeMs, key, month: monthOf(file.path), summary: result.summary };
+				checkpoint.files[file.path] = { size: file.size, mtimeMs: file.mtimeMs, key, month: monthOf(file.path), summary: result.summary, extractor: EXTRACTOR_VERSION };
 				if (result.catalog?.length) {
 					const hash = createHash("sha1").update(result.catalog.join("\n")).digest("hex").slice(0, 16);
 					result.summary.catalog = hash;
