@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- `exp check` lets a reference check run as long as the task's `check_timeout_s` (default limit stays 180 s), so tasks with slow verifiers, such as SWE-Bench Pro's Go and JS suites in Docker, can pass the gate.
+
 ## 0.8.0
 
 - New CLI command `pi-evals exp` runs controlled, paired experiments: the same tasks under two arms (for example without and with anchorloop) with the same model, so a difference can be put down to the arm. `exp check` confirms a task's base fails its check and its reference passes it 3 of 3; `exp run` runs k trials per task and arm, each with one identical follow-up turn; `exp grade` regrades stored trials after a grader fix; `exp show` gives pass@1, pass^k, process rates, cost and minutes per trial, and B − A with a paired cluster-bootstrap 95% CI over tasks.

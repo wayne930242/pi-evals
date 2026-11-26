@@ -17,7 +17,9 @@ export interface GateResult {
 	lines: string[];
 }
 
+/** A reference check slower than this fails the gate; a task that sets check_timeout_s raises it to that. */
 const LIMIT_MS = 180_000;
+const limitMs = (task: Task) => (task.check_timeout_s ? task.check_timeout_s * 1000 : LIMIT_MS);
 
 function check(task: Task, work: string): { exit: number | null; ms: number; tail: string } {
 	rmSync(join(work, ".exp-check"), { recursive: true, force: true });
@@ -64,7 +66,7 @@ export function gate(task: Task, fixture: string, options: { runs?: number } = {
 		for (let i = 1; i <= (options.runs ?? 3); i++) {
 			const r = check(task, ref);
 			if (r.exit !== 0) fail(`reference run ${i} fails the check (exit ${r.exit}: ${r.tail})`);
-			else if (r.ms > LIMIT_MS) fail(`reference run ${i} takes ${(r.ms / 1000).toFixed(0)} s (limit ${LIMIT_MS / 1000} s)`);
+			else if (r.ms > limitMs(task)) fail(`reference run ${i} takes ${(r.ms / 1000).toFixed(0)} s (limit ${limitMs(task) / 1000} s)`);
 			else lines.push(`ok   reference run ${i} passes (${(r.ms / 1000).toFixed(1)} s)`);
 		}
 	} finally {
