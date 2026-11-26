@@ -113,7 +113,11 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 					more(
 						L("By day and version", "查看每日與各版本的通過數"),
 						T([L("Day", "日期"), L("Pass", "通過"), L("Fail", "未通過")], d.perDay.map((r) => [r.day, r.pass, r.fail])) +
-							T([L("Version", "版本"), L("Pass", "通過"), L("Fail", "未通過")], d.byVersion.map((r) => [r.version, r.pass, r.fail])),
+							T([L("Version", "版本"), L("Pass", "通過"), L("Fail", "未通過")], d.byVersion.map((r) => [r.version, r.pass, r.fail])) +
+							(d.byPackage
+								? `<p>${esc(L(`By ${d.byPackage.package} version: before ${d.byPackage.version} ${pct(d.byPackage.before.passRate)}, from ${d.byPackage.version} ${pct(d.byPackage.after.passRate)}.`, `依 ${d.byPackage.package} 版本：${d.byPackage.version} 之前 ${pct(d.byPackage.before.passRate)}，${d.byPackage.version} 起 ${pct(d.byPackage.after.passRate)}。`))}</p>` +
+									T([L(`${d.byPackage.package} version`, `${d.byPackage.package} 版本`), L("Pass", "通過"), L("Fail", "未通過")], d.byPackage.versions.map((r) => [r.version, r.pass, r.fail]))
+								: ""),
 					)
 				}</article>`;
 			}).join("")

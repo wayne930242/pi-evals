@@ -111,7 +111,7 @@ test("/evals label without arguments asks for the rule, the verdict and an optio
 	h.answers.push("動手前先說好怎麼驗證", "沒照做", "先改檔才說要測");
 	await h.run("label");
 	assert.deepEqual(h.asked.map((a) => a.kind), ["select", "select", "input"]);
-	assert.deepEqual(h.asked[0].options, ["動手前先說好怎麼驗證", "最後一次修改後有跑檢查", "完成的待辦附有證據", "收尾時不需要提醒", "其他"]);
+	assert.deepEqual(h.asked[0].options, ["動手前先說好怎麼驗證", "最後一次修改後有跑檢查", "完成的待辦附有證據", "收尾時不需要提醒", "排工作時說清楚怎麼分工", "其他"]);
 	assert.deepEqual(h.asked[1].options, ["照做", "沒照做", "看不出來"]);
 	const [row] = h.raw();
 	assert.equal(row.evaluation_name, "anchor_before_first_edit");

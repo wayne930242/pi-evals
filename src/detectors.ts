@@ -15,6 +15,7 @@
  * in a monitor (by its exit code), passing evidence recorded after the last change, or, when no anchor command ran,
  * a test, build, lint or type-check run after it.
  */
+import { PlanGraphTracker } from "./plan-graph.ts";
 import type { Label } from "./schema.ts";
 
 /**
@@ -22,7 +23,7 @@ import type { Label } from "./schema.ts";
  * (commit 9f72366, 2026-11-23T10:51:07Z). Sessions that started earlier are out of scope.
  */
 export const ERA_START = "2026-11-23T10:51:07.000Z";
-export const DETECTORS = ["anchor_before_first_edit", "check_after_last_edit", "todo_evidence", "close_guard_quiet"] as const;
+export const DETECTORS = ["anchor_before_first_edit", "check_after_last_edit", "todo_evidence", "close_guard_quiet", "plan_names_graph"] as const;
 export type DetectorName = (typeof DETECTORS)[number];
 export interface DetectorResult {
 	name: DetectorName;
@@ -123,11 +124,13 @@ export class ProcessTracker {
 	private sawUser = false;
 	private briefAnchor = false;
 	private notices = new Map<NoticeKind, number>();
+	private plan = new PlanGraphTracker();
 
 	/** Notice kinds seen so far, for `anchorloop.close_guard.notice` records. */
 	feed(raw: unknown): NoticeKind | undefined {
 		const entry = raw as Entry;
 		const seq = ++this.seq;
+		if (entry && typeof entry === "object") this.plan.feed(entry as Record<string, unknown>);
 		if (entry?.type === "custom" && entry.customType === "todo/v1" && entry.data?.v === 1 && Array.isArray(entry.data.tasks)) {
 			this.tasks = entry.data.tasks;
 			return undefined;
@@ -212,8 +215,9 @@ export class ProcessTracker {
 	}
 
 	results(inScope: boolean): DetectorResult[] {
-		if (!inScope) return DETECTORS_ALL.map((name) => ({ name, label: "na", explanation: "out_of_scope_pre_3.0" }));
-		return [this.anchorFirst(), this.checkAfter(), this.todoEvidence(), this.quiet()];
+		// The anchorloop era bounds the anchorloop rules only; the sb planning rule is judged in every session (long-lived mains started earlier).
+		if (!inScope) return [...DETECTORS_ALL.filter((name) => name !== "plan_names_graph").map((name): DetectorResult => ({ name, label: "na", explanation: "out_of_scope_pre_3.0" })), this.plan.results()];
+		return [this.anchorFirst(), this.checkAfter(), this.todoEvidence(), this.quiet(), this.plan.results()];
 	}
 
 	private anchorFirst(): DetectorResult {

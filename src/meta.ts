@@ -18,6 +18,8 @@ export interface MetricMeta {
 
 export interface DetectorMeta extends MetricMeta {
 	example: { pass: Text; fail: Text };
+	/** The package version whose arrival this detector measures: its results are also split by that package's version, and the pin change that brings it is highlighted. */
+	introducedIn?: { package: string; version: string };
 }
 
 const t = (en: string, zh: string): Text => ({ en, zh });
@@ -288,6 +290,23 @@ export const DETECTOR_META: Record<string, DetectorMeta> = {
 		example: {
 			pass: t("Edits, runs the check green, ends; no reminder appears.", "改檔、跑檢查通過、結束，沒有出現提醒。"),
 			fail: t("Edits and ends; the guard adds 'no passing run of `npm test`'.", "改檔就結束，收尾檢查加上「沒有 `npm test` 的通過紀錄」。"),
+		},
+	},
+	plan_names_graph: {
+		introducedIn: { package: "pi-straw-boss", version: "0.101.0" },
+		label: t("Plan says how the work splits", "排工作時說清楚怎麼分工"),
+		meaning: t(
+			"When a Straw Boss main (coordinator or standing) writes its plan as todos, it names the plan's shape: one loop it runs itself, parallel workers it merges, or an orchestrator handing work out.",
+			"Straw Boss 的主代理（協調或常駐）把計畫寫成待辦時，有說明這份計畫的分工方式：自己一路做完、分給幾個人平行做再合併，或由主代理派工給工作者。",
+		),
+		goodDirection: "higher",
+		howComputed: t(
+			"Passes when the open todos left by the main's first todo create carry a graph (the todo's graph field, or an older metadata.graph), or when its next todo call adds one, as sb 0.101.0 and later ask on that create. Fails when it went on planning without one. Sessions that are not such a main, or never planned, do not count.",
+			"主代理第一次建立待辦後，還沒完成的待辦有標分工方式（待辦的 graph 欄位，或舊版的 metadata.graph）即通過；第一次沒標、但下一次動待辦時補上的也算通過（sb 0.101.0 起會在那次建立待辦時提醒）。沒標就繼續排工作的不通過。不是這類主代理、或從沒排過工作的不算。",
+		),
+		example: {
+			pass: t("Creates three todos with graph 'fan-out/fan-in', then dispatches them.", "建立三項待辦並標上「fan-out/fan-in」，再派出去。"),
+			fail: t("Creates three todos with no graph, gets sb's reminder, and adds a fourth without one.", "建立三項待辦沒標分工方式，收到 sb 提醒後又加了第四項，仍然沒標。"),
 		},
 	},
 };

@@ -1,5 +1,6 @@
 import type { ReportModel } from "../model.ts";
 import type { Preset } from "../ranges.ts";
+import { introduced } from "./findings.ts";
 import { type Change, esc, type Lang, num, words } from "./format.ts";
 
 const KINDS = ["pin", "model-routing", "rule", "agent-role", "skill", "manual"] as const;
@@ -32,7 +33,8 @@ export function changeStrip(m: ReportModel, all: Change[], picks: Change[], ids:
 		if (cells.length > 5) marks.push(`<text class="slot-count" x="${left + 14}" y="28" text-anchor="middle">×${cells.length}</text>`);
 	}
 	const links = picks.map((c,i) => {
-		const {px, py, dot} = labeled.get(c)!, end = px > 700, caption = c.package ? `${c.package} ${c.to ?? ""}` : `${label(c.kind)} · ${c.at.slice(5,16).replace("T", " ")}`;
+		const {px, py, dot} = labeled.get(c)!, end = px > 700, brings = introduced(c, m), skipped = brings && brings.version !== c.to ? L(` (includes ${brings.version})`, `（含 ${brings.version}）`) : "",
+			caption = c.package ? `${c.package} ${c.to ?? ""}${skipped}` : `${label(c.kind)} · ${c.at.slice(5,16).replace("T", " ")}`;
 		const y = 87 + i * 23;
 		return `<a href="#${ids.get(c)}"><title>${esc(caption)}</title><path class="guide" d="M${px} ${py}V${y - 6}h${end ? -7 : 7}"/>${dot}<text x="${px + (end ? -10 : 10)}" y="${y}" text-anchor="${end ? "end" : "start"}">${esc(Array.from(caption).length > 48 ? Array.from(caption).slice(0, 47).join("") + "…" : caption)}</text></a>`;
 	}).join("");

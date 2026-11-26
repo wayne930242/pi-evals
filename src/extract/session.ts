@@ -396,7 +396,7 @@ export class SessionReader {
 		const evals: SessionSummary["evals"] = {};
 		for (const result of this.tracker.results(inScope)) {
 			evals[result.name] = { label: result.label, value: result.value, explanation: result.explanation };
-			if (inScope) {
+			if (result.explanation !== "out_of_scope_pre_3.0") {
 				const t = (startDay.detectors[result.name] ??= { pass: 0, fail: 0, na: 0 });
 				t[result.label] += 1;
 			}

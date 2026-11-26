@@ -24,7 +24,7 @@ export interface FileEntry {
 }
 
 /** Bump when extraction changes what it derives; every summary written by another version is read again. */
-export const EXTRACTOR_VERSION = 5;
+export const EXTRACTOR_VERSION = 6;
 
 export interface Checkpoint {
 	v: 1;

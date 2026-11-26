@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { ASK_BUCKETS, type DayAgg, emptyDay, mergeDay, type SessionRow } from "./aggregate.ts";
 import type { DaysIndex } from "./build.ts";
-import { type Change, versionAt } from "./changes.ts";
+import { atLeast, type Change, versionAt } from "./changes.ts";
 import type { Coverage } from "./coverage.ts";
 import { DETECTORS, ERA_START } from "./detectors.ts";
 import { CHANGE_KIND_META, CLOSE_KIND_META, DETECTOR_META, METRICS, NOTICE_META, STALL_KIND_META } from "./meta.ts";
@@ -126,6 +126,38 @@ export function impactMetrics(rows: SessionRow[], ownerOf: (tool: string) => str
 		anchor_before_first_edit: d("anchor_before_first_edit"),
 		check_after_last_edit: d("check_after_last_edit"),
 		todo_evidence: d("todo_evidence"),
+		plan_names_graph: d("plan_names_graph"),
+	};
+}
+
+/** Dotted versions in numeric order; anything else (unknown, a sha) after them. */
+const byVersion = (a: string, b: string) => {
+	const pa = /^\d+(\.\d+)*$/.test(a) ? a.split(".").map(Number) : undefined, pb = /^\d+(\.\d+)*$/.test(b) ? b.split(".").map(Number) : undefined;
+	if (!pa || !pb) return pa ? -1 : pb ? 1 : a.localeCompare(b);
+	for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+	return 0;
+};
+
+/** A detector's results by the version of the package it measures, at each session's start, and before and from the version that brought it. */
+export function packageSplit(rows: SessionRow[], changes: Change[], detector: string, since: { package: string; version: string }) {
+	const versions = new Map<string, { pass: number; fail: number }>();
+	const sides = { before: { pass: 0, fail: 0 }, after: { pass: 0, fail: 0 } };
+	for (const r of rows) {
+		const v = r.ev[detector];
+		if (v === undefined) continue;
+		const version = versionAt(changes, since.package, r.s) ?? "unknown";
+		const cell = versions.get(version) ?? { pass: 0, fail: 0 };
+		cell[v ? "pass" : "fail"] += 1;
+		versions.set(version, cell);
+		const later = atLeast(version, since.version);
+		if (later !== undefined) sides[later ? "after" : "before"][v ? "pass" : "fail"] += 1;
+	}
+	const withRate = (x: { pass: number; fail: number }) => ({ ...x, passRate: rate(x.pass, x.pass + x.fail) });
+	return {
+		...since,
+		versions: [...versions].sort(([a], [b]) => byVersion(a, b)).map(([version, x]) => ({ version, ...withRate(x) })),
+		before: withRate(sides.before),
+		after: withRate(sides.after),
 	};
 }
 
@@ -309,6 +341,7 @@ export function buildModel(options: {
 					return { day, pass: x.pass, fail: x.fail };
 				}),
 				byVersion: (versions.get(d.name) ?? []).map((v) => ({ ...v, passRate: rate(v.pass, v.pass + v.fail) })),
+				byPackage: DETECTOR_META[d.name]?.introducedIn ? packageSplit(selected, sortedChanges, d.name, DETECTOR_META[d.name].introducedIn!) : null,
 			})),
 			notices: total.notices,
 		},

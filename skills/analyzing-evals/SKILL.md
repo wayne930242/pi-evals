@@ -23,3 +23,11 @@ Reading `labels`: agreement counts the user's verdicts only, split into after th
 Reading `items`: an item is one todo task from `in_progress` to done or deleted. Subagent cost is exact; main cost is an estimate, split evenly among items in progress at the same moment, so say which part you quote. Compare only like with like (the view already separates work handed to subagents from work the main did itself); when it says "too few items to tell", say that in those words rather than reading the medians. A stall says what woke the main (`human`, `peer`, `child`, `timer`, `ci`, `device`), not why it waited; `on` names the subagent, peer session or sb wait (`W12`, `L340`, `T5`) when known.
 
 Lead with what rose, fell or held steady, and give the counts behind the rates. Say “too early to tell” when a side is short or too small; when other changes landed nearby, say “we cannot tell which change mattered.” Even a clear difference is not proof of cause. More sessions or skill loads measure activity, not better work.
+
+## When a number looks wrong
+
+1. Check freshness first: the last extract time, and the `extractor` stamp on the summaries in `index/checkpoint.json` against the current version. A run stopped mid-way once left old summaries under a new checkpoint (check agreement read 11/20; a clean rebuild gave 23/24). If they disagree, say the number is stale and do not interpret it.
+2. Before trusting a detector's rate, check it against the user's labels: the `labels` view, then the disagreeing sessions one by one, and which way they lean. All code=fail with human=pass means the detector undercounts (an anchor rate read 20% that was about 73%).
+3. Error analysis: read the disagreeing sessions' structure (entry types, tool names, order; no transcript text into records), group the misses by cause, count each group, and fix the biggest first.
+4. When loosening a detector, keep a guard set of real should-fail sessions that must stay fail. A rule ambiguity (an anchor stated after the first edit) is the user's decision: ask, record it as a `recheck` label, and do not settle it silently in code.
+5. Have the user label about 30 sessions by hand before trusting any automated grader; human labels are the reference. Observational numbers are monitoring; whether skill X helped needs a controlled experiment, not this report.

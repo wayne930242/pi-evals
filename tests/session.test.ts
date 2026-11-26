@@ -61,7 +61,8 @@ test("process detectors run on the session and land in the summary and as evalua
 	assert.equal(summary.evals.todo_evidence?.value, 0.5);
 	assert.equal(summary.evals.close_guard_quiet?.explanation, "no_passing_run");
 	const evals = records.filter((r) => r.name === "gen_ai.evaluation.result");
-	assert.equal(evals.length, 4);
+	assert.equal(summary.evals.plan_names_graph?.explanation, "not_sb_main");
+	assert.equal(evals.length, 5);
 	for (const e of evals) {
 		assert.equal(e.attrs["eval.annotator_kind"], "CODE");
 		assert.equal(e.attrs["eval.scope"], "session");
@@ -70,7 +71,7 @@ test("process detectors run on the session and land in the summary and as evalua
 
 test("sessions before 2026-11-23 are out of scope for detectors", () => {
 	const { summary } = read("/s/a.jsonl", sessionLines(richSession(HOME, "s-old", "2026-10-02T10:00:00.000Z")));
-	for (const result of Object.values(summary.evals)) assert.equal(result?.explanation, "out_of_scope_pre_3.0");
+	for (const [name, result] of Object.entries(summary.evals)) assert.equal(result?.explanation, name === "plan_names_graph" ? "not_sb_main" : "out_of_scope_pre_3.0");
 });
 
 test("a subagent session knows its logical id and parent from its file name and brief", () => {
@@ -120,9 +121,9 @@ test("bash counts as a skill load only when the whole command prints one SKILL.m
 	assert.deepEqual(skillsFromCommand("sed -i 's/a/b/' skills/a/SKILL.md"), []);
 });
 
-test("out-of-scope sessions do not add to the per-day detector counts", () => {
+test("out-of-scope sessions do not add to the per-day anchorloop detector counts; the sb planning rule still counts", () => {
 	const { summary } = read("/s/a.jsonl", sessionLines(richSession(HOME, "s-old2", "2026-10-02T10:00:00.000Z")));
-	assert.deepEqual(summary.days["2026-10-02"].detectors, {});
+	assert.deepEqual(summary.days["2026-10-02"].detectors, { plan_names_graph: { pass: 0, fail: 0, na: 1 } });
 });
 
 test("F009: a skill path is normalised before it is named", async () => {

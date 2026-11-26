@@ -49,8 +49,9 @@ Back-fill rebuilds each session's items from its `todo/v1` snapshots, diffed alo
 | `check_after_last_edit` | `anchor_green`, `evidence_after_change`, `check_run_after_change` | `no_passing_run_after_change`, `no_check_after_change` | `no_edit`, `prose_only`, `anchor_without_command` |
 | `todo_evidence` | `all_evidenced` | `completed_without_evidence` (value = share with evidence) | `no_completed_task` |
 | `close_guard_quiet` | `no_notice` | the commonest notice kind | `no_edit` |
+| `plan_names_graph` | `graph_at_first_create`, `graph_after_rule`, `graph_next_todo_call` | `kept_planning_without_graph`, `plan_without_graph` | `not_sb_main`, `no_plan` |
 
-Sessions that started before 2026-11-23T10:51:07Z (the anchorloop 3.0.0 pin) get `na` with `out_of_scope_pre_3.0` for all four.
+Sessions that started before 2026-11-23T10:51:07Z (the anchorloop 3.0.0 pin) get `na` with `out_of_scope_pre_3.0` for the four anchorloop checks; `plan_names_graph` is judged in every session, since sb mains live for weeks.
 
 ## Labels
 

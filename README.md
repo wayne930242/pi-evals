@@ -11,7 +11,7 @@ Agents can read the same numbers through one tool, `evals_query`, and log a corr
 - **Ask-user**: questions asked, how long you took to answer, how many you dismissed, and whether the answer came from the terminal or a remote channel.
 - **Monitors**: background jobs by outcome and duration.
 - **Subagents**: launches by role and model, and their cost by role.
-- **Process**: four checks of the anchorloop rules per session, for sessions started after anchorloop 3.0.0 was pinned (2026-11-23T10:51:07Z); see [docs/design.md](docs/design.md#process-detectors).
+- **Process**: four checks of the anchorloop rules per session, and one of the Straw Boss planning rule (a coordinator or standing main names its plan's graph), for sessions started after anchorloop 3.0.0 was pinned (2026-11-23T10:51:07Z); see [docs/design.md](docs/design.md#process-detectors).
 - **Cost**: model cost and tokens, and the cost of the sessions that loaded each skill.
 - **Work items**: each todo task from the moment it is switched to in progress until it is done or deleted: what it cost (subagents exactly, the main agent as an even share), where it closed (reviewer approval, a landed car, a wrap, evidence), where it stalled and on whom, and whether one way of working is cheaper than another of the same kind.
 - **Your labels and corrections**: your verdict on a process rule, given in the moment with `/evals label` or after the fact, and the corrections an agent logs when you correct how it worked.
@@ -48,7 +48,7 @@ The observer loads in every session, subagents included.
 | `/evals report [--since YYYY-MM-DD \| --days N] [--project <key>]` | Builds the linked date ranges, or one custom report when a start date or day count is given. |
 | `/evals mark <note>` | Adds a note to the change timeline, e.g. `/evals mark workers moved to gpt-6.2-astra`. |
 | `/evals label` | Labels the current session while the work is in front of you: pick a rule (or 「其他」), then 照做, 沒照做 or 看不出來, then an optional note in your own words. |
-| `/evals label <rule> pass\|fail\|unclear [note]` | The same in one line; `<rule>` is a check name (`anchor_before_first_edit`, `check_after_last_edit`, `todo_evidence`, `close_guard_quiet`) or `other`. |
+| `/evals label <rule> pass\|fail\|unclear [note]` | The same in one line; `<rule>` is a check name (`anchor_before_first_edit`, `check_after_last_edit`, `todo_evidence`, `close_guard_quiet`, `plan_names_graph`) or `other`. |
 | `/evals label <your words>` | Anything else, e.g. `/evals label 剛剛沒先跑測試就說完成`: the agent turns your words into labels with `evals_label` and says in one line what it recorded. The verdict is yours and your words are kept as the note. |
 | `/evals label undo` | Withdraws the current session's last label given in the moment. |
 
@@ -150,7 +150,7 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
 | --- | --- |
 | `events/<YYYY-MM-DD>.jsonl` | Live observer records. |
 | `index/records/<YYYY-MM>/<key>.jsonl` | Back-filled records, one file per session file. |
-| `index/checkpoint.json` | Size, modification time and summary per session file. |
+| `index/checkpoint.json` | Size, modification time, summary and the extractor version that wrote it, per session file. |
 | `index/days.json` | Aggregates by day and project. |
 | `index/sessions.json` | A few numbers per session with its start time, for splitting sessions at a change's time. |
 | `index/session-evals.json` | Process check results per session, for joining your labels. |

@@ -282,3 +282,46 @@ test("check after last edit: commands that only mention tests are not checks", (
 		assert.equal(r.check_after_last_edit.explanation, "no_check_after_change", command);
 	}
 });
+
+// plan_names_graph: structure only, no transcript text.
+const mainPrompt = (kind: string) => ({ type: "message", message: { role: "system", content: [], sections: { "straw-boss": `<straw-boss>\nYou are the main agent of Herdr tab 4 a tab, of kind ${kind}: the boss works with you here.\n</straw-boss>` } } });
+const standingPrompt = { type: "message", message: { role: "system", content: [], sections: { "straw-boss": "<straw-boss>\nYou are the standing main of Herdr tab 2: you mind one system.\n</straw-boss>" } } };
+const RULE = "sb: your open todos name no graph. From planning.md:\n...\nSet the `graph` field on these todos.";
+const todoCall = (id: string, args: Record<string, unknown>, tasks: unknown[], rule = false) => [
+	assistant(call(id, "todo", args)),
+	todo(tasks),
+	{ type: "message", id: `e${++n}`, message: { role: "toolResult", toolCallId: id, isError: false, content: [{ type: "text", text: rule ? `Created #1\n${RULE}` : "Created #1" }], details: { action: args.action, tasks } } },
+];
+const plan = (extra: Record<string, unknown> = {}) => [{ id: 1, subject: "s", status: "pending", ...extra }, { id: 2, subject: "s", status: "pending" }];
+
+test("plan names graph: a coordinator's first create with a graph passes; a legacy metadata.graph counts", () => {
+	assert.deepEqual(run([mainPrompt("coordinator"), ...todoCall("t1", { action: "create" }, plan({ graph: "fan-out/fan-in" }))]).plan_names_graph, { name: "plan_names_graph", label: "pass", explanation: "graph_at_first_create" });
+	assert.equal(run([standingPrompt, ...todoCall("t1", { action: "create" }, plan({ metadata: { graph: "single" } }))]).plan_names_graph.label, "pass");
+	assert.equal(run([mainPrompt("coordinator"), ...todoCall("t1", { action: "create" }, plan({ graph: "pipeline" }))]).plan_names_graph.label, "fail", "a name that is no graph is none");
+});
+
+test("plan names graph: the next todo call after sb's planning rule decides", () => {
+	const first = todoCall("t1", { action: "create" }, plan(), true);
+	const fixed = run([mainPrompt("coordinator"), ...first, ...todoCall("t2", { action: "update", id: 1, graph: "single-loop" }, plan({ graph: "single-loop" }))]).plan_names_graph;
+	assert.deepEqual([fixed.label, fixed.explanation], ["pass", "graph_after_rule"]);
+	const kept = run([mainPrompt("coordinator"), ...first, ...todoCall("t2", { action: "create" }, [...plan(), { id: 3, subject: "s", status: "pending" }])]).plan_names_graph;
+	assert.deepEqual([kept.label, kept.explanation], ["fail", "kept_planning_without_graph"]);
+	assert.deepEqual(run([mainPrompt("coordinator"), ...first]).plan_names_graph.label, "fail", "a plan with no graph and no later todo call");
+});
+
+test("plan names graph: na for a session that is no coordinator or standing main, or that never planned", () => {
+	assert.equal(run([...todoCall("t1", { action: "create" }, plan())]).plan_names_graph.explanation, "not_sb_main");
+	assert.equal(run([mainPrompt("integrator"), ...todoCall("t1", { action: "create" }, plan())]).plan_names_graph.label, "na");
+	assert.equal(run([mainPrompt("coordinator"), ...todoCall("t1", { action: "create" }, [{ id: 1, subject: "s", status: "completed" }])]).plan_names_graph.explanation, "no_plan");
+	const steps = [{ id: 1, subject: "s", status: "pending", metadata: { sb: { kind: "train" } } }];
+	assert.equal(run([mainPrompt("coordinator"), ...todoCall("t1", { action: "create" }, steps)]).plan_names_graph.explanation, "no_plan", "a train's steps are not the plan");
+	assert.equal(run([mainPrompt("coordinator"), ...todoCall("t1", { action: "create" }, plan())], false).plan_names_graph.label, "fail", "the anchorloop era does not bound the sb rule");
+});
+
+test("plan names graph: the kind follows role steers and kind entries", () => {
+	const steer = (name: string, duty: string) => ({ type: "custom_message", customType: "straw-boss", content: "x", details: { briefed: { name, duty } } });
+	assert.equal(run([steer("main", "coordinator"), ...todoCall("t1", { action: "create" }, plan())]).plan_names_graph.label, "fail");
+	assert.equal(run([mainPrompt("coordinator"), steer("member", ""), ...todoCall("t1", { action: "create" }, plan())]).plan_names_graph.label, "na");
+	const toIntegrator = { type: "custom", customType: "straw-boss", data: { duty: "integrator" } };
+	assert.equal(run([mainPrompt("coordinator"), toIntegrator, ...todoCall("t1", { action: "create" }, plan())]).plan_names_graph.label, "na");
+});

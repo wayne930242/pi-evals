@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyDay } from "../src/aggregate.ts";
 import type { Change } from "../src/changes.ts";
-import { buildModel } from "../src/model.ts";
+import { buildModel, packageSplit } from "../src/model.ts";
 import { renderHtml } from "../src/render.ts";
 import { select } from "../src/report/findings.ts";
 import { periodRows } from "../src/report/week.ts";
@@ -106,4 +106,19 @@ test("range chart includes extraction day, counts changes and does not skip empt
 	assert.deepEqual([w.length, w[0].day, w.at(-1)?.day], [5, "2026-11-10", "2026-11-14"]);
 	assert.equal(w.find((r) => r.day === "2026-11-10")?.changes, 1);
 	assert.equal(w.reduce((s, r) => s + r.sessions, 0), 48);
+});
+
+test("a pin that brings sb past 0.101.0 is always highlighted, captioned with the skipped version, and plan_names_graph splits by sb version", () => {
+	const pin = (from: string, to: string, when: string): Change => ({ at: when, kind: "pin", subject: `sb ${to}`, package: "pi-straw-boss", from, to, source: "git", sha: to });
+	const brings = pin("0.100.2", "0.102.0", "2026-11-10T12:00:00.000Z");
+	const m = fixture([pin("0.99.0", "0.100.2", "2026-11-09T12:00:00.000Z"), brings, change("model-routing", "route"), change("pin", "other")], 3);
+	m.changes.forEach((c, i) => { if (c.kind !== "pin" || !c.package) c.at = `2026-11-1${i}T13:00:00.000Z`; });
+	assert.ok(select(m).highlighted.some((c) => c.to === "0.102.0"));
+	const strip = renderHtml(m, "en", 30).match(/<section class="change-strip">(.*?)<\/section>/s)?.[1] ?? "";
+	assert.match(strip, /pi-straw-boss 0\.102\.0 \(includes 0\.101\.0\)/);
+	const row = (s: string, ok: 0 | 1) => ({ s, p: "p", k: 0 as const, c: 0, t: {}, ac: 0, ax: 0, sl: 0, nt: 0, ev: { plan_names_graph: ok } });
+	const split = packageSplit([row("2026-11-09T13:00:00Z", 0), row("2026-11-09T14:00:00Z", 1), row("2026-11-10T13:00:00Z", 1), row("2026-11-01T00:00:00Z", 0)], m.changes, "plan_names_graph", { package: "pi-straw-boss", version: "0.101.0" });
+	assert.deepEqual([split.before.pass, split.before.fail, split.after.pass, split.after.fail], [1, 1, 1, 0], "a session before any sb pin is unknown, on neither side");
+	assert.deepEqual(split.versions.map((v) => v.version), ["0.100.2", "0.102.0", "unknown"]);
+	assert.ok(m.process.detectors.find((d) => d.name === "plan_names_graph")?.byPackage);
 });

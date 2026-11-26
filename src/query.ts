@@ -81,6 +81,11 @@ export function query(view: View, options: { since?: string; days?: number; proj
 			body.push(`${d.name} (${label}): ${pct(d.passRate)}, not applicable ${d.na}`);
 			const versions = d.byVersion.filter((v) => v.pass + v.fail > 0).map((v) => `${v.version} ${pct(v.passRate)}`);
 			if (versions.length) body.push(`  by anchorloop version: ${versions.slice(-4).join("; ")}`);
+			const p = d.byPackage;
+			if (p) {
+				const byV = p.versions.filter((v) => v.pass + v.fail > 0).map((v) => `${v.version} ${pct(v.passRate)}`);
+				body.push(`  by ${p.package} version: ${byV.slice(-6).join("; ") || "n/a"}; before ${p.version} ${pct(p.before.passRate)}, from ${p.version} ${pct(p.after.passRate)}`);
+			}
 		}
 		body.push(`close-guard reminders: ${Object.entries(m.process.notices).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}`);
 	} else if (view === "cost") {

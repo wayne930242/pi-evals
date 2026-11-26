@@ -1,7 +1,16 @@
+import { crosses } from "../changes.ts";
 import type { Rate, ReportModel } from "../model.ts";
 import { type Change, type Lang, num, pct, usd, type Words, words } from "./format.ts";
 
-type Key = "anchor_before_first_edit" | "check_after_last_edit" | "package_error_rate" | "tool_error_rate" | "cost_per_session";
+type Key = "anchor_before_first_edit" | "check_after_last_edit" | "plan_names_graph" | "package_error_rate" | "tool_error_rate" | "cost_per_session";
+
+/** The detector whose package version this pin change brings in (or skips past), with that version. */
+export function introduced(c: Pick<Change, "kind" | "package" | "from" | "to">, m: Pick<ReportModel, "meta">): { detector: Key; version: string } | undefined {
+	for (const [name, md] of Object.entries(m.meta.detectors)) {
+		if (md.introducedIn && crosses(c, md.introducedIn.package, md.introducedIn.version)) return { detector: name as Key, version: md.introducedIn.version };
+	}
+	return undefined;
+}
 export interface Reading {
 	key: Key;
 	label: string;
@@ -14,7 +23,10 @@ export function readings(c: Change, m: ReportModel, lang: Lang): Reading[] {
 	const L = words(lang), i = c.impact;
 	const has = (k: Key) => i?.before[k]?.value != null && i.after[k]?.value != null;
 	const process = c.package === "pi-anchorloop" && has("anchor_before_first_edit");
-	const keys: Key[] = process
+	const brings = introduced(c, m);
+	const keys: Key[] = brings
+		? [brings.detector, "cost_per_session"]
+		: process
 		? ["anchor_before_first_edit", "check_after_last_edit"]
 		: [has("package_error_rate") ? "package_error_rate" : "tool_error_rate", "cost_per_session"];
 	return keys.map((key) => {
@@ -64,7 +76,8 @@ export function select(m: ReportModel) {
 	const rest = candidates.filter((c) => c !== lead && c.at <= lead.at && (!lead.sha || c.sha !== lead.sha));
 	const second = rest.find((c) => c.impact?.smallSample && c.impact.before.sessions && c.impact.after.sessions) ??
 		rest.find((c) => (c.kind === "pin" || c.kind === "model-routing") && c.impact && !c.impact.incomplete) ?? rest[0];
-	const highlighted = all.filter((c) => c === lead || c === second);
+	// A pin change that brings a detector's package version is always shown: it is what that detector measures.
+	const highlighted = all.filter((c) => c === lead || c === second || !!introduced(c, m));
 	return { all, lead, highlighted, folded: all.filter((c) => !highlighted.includes(c)) };
 }
 /** Editorial choices shared by the HTML timeline and the compact query. */

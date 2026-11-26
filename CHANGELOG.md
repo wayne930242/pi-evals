@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- An extract stopped part-way after an extractor upgrade no longer passes off old results as current. Each session file's summary now records the extractor version that wrote it, and any other version is read again. Before, the first 0.6.0 extract was killed by a timeout and saved the new version mark while most summaries were still old, so the next run skipped them: check agreement read 11/20 instead of 23/24 until a full rebuild. Every session is read once more (extractor version 6).
+- New check 「排工作時說清楚怎麼分工」 (`plan_names_graph`): whether a Straw Boss coordinator or standing main names its plan's graph (`single-loop`, `fan-out/fan-in`, `orchestrator-worker`; the todo's `graph` field or an older `metadata.graph`) when it first creates open todos. It also passes when the next todo call adds the graph after sb's planning reminder (sb 0.101.0 and later). It fails when the main keeps planning without one. Unlike the anchorloop checks, it is judged in sessions of any age, since sb mains live for weeks.
+- The process view and report also split this check by pi-straw-boss version at session start, before and from 0.101.0. The change strip always highlights the sb pin that brings 0.101.0, including one that skips it (0.100.2 → 0.102.0, captioned 「含 0.101.0」).
+- The analyzing-evals skill gains 「When a number looks wrong」: check freshness first, validate a detector against your labels, group misses by cause, keep a guard set, and treat hand labels as the reference.
+
 ## 0.6.0
 
 - New command `/ask-ai <question>` has the agent answer you now instead of taking the question as a reproach and starting new work. The question goes in with a short instruction: answer first, in your language, change nothing, start no work, and end with at most one line of suggested next step. While that run lasts (until it ends or you send another message), `write`, `edit`, `subagent`, `boss_pair`, `MonitorCreate`, `LoopCreate`, `call_tower`, `todo` (except `list`/`get`) and `intercom` (`send`/`ask`/`handover`) are refused with a one-line reason; `bash`, `read` and other tools still run.

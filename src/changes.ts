@@ -176,3 +176,17 @@ export function versionAt(changes: Change[], pkg: string | string[], at: string)
 	}
 	return version;
 }
+
+/** Whether a dotted version is at or after `min`, by numeric parts; a version that is not dotted numbers (a git sha) is undefined. */
+export function atLeast(version: string | undefined, min: string): boolean | undefined {
+	const parts = (v: string | undefined) => (v && /^\d+(\.\d+)*$/.test(v) ? v.split(".").map(Number) : undefined);
+	const a = parts(version), b = parts(min);
+	if (!a || !b) return undefined;
+	for (let i = 0; i < Math.max(a.length, b.length); i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+	return true;
+}
+
+/** Whether a pin change brings `pkg` to `version` or past it, from a version before it (or none): a version it skipped counts. */
+export function crosses(c: Pick<Change, "kind" | "package" | "from" | "to">, pkg: string, version: string): boolean {
+	return c.kind === "pin" && c.package === pkg && atLeast(c.to, version) === true && atLeast(c.from, version) !== true;
+}
