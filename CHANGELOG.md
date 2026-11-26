@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- `/evals label` labels the current session while the work is in front of you: pick a rule (or 「其他」), then 照做, 沒照做 or 看不出來, then an optional note. `/evals label <rule> pass|fail|unclear [note]` does it in one line, and `/evals label undo` withdraws the session's last one. Each label keeps the todo item in progress.
+- A new tool, `evals_label`, lets an agent log a correction when you correct how it worked, by rule and failure type (`no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction`, `other`). It accepts names only and adds about 590 bytes of tool text.
+- The report's labels section counts labels given after the fact (事後標) and in the moment (當下標) apart, with code agreement for each; agent corrections never count toward agreement. A new 「被糾正」 section counts corrections by rule, failure type, skill loaded and anchorloop version, and says when there are too few to read. A concept card, 「當下標記 vs 事後標記」, explains the difference with this report's numbers.
+- `evals_query` has a `labels` view, and `findings` adds a line when three or more corrections share a rule and failure type.
+- Labels show up at the next report or query, with no extract needed.
+
 ## 0.4.1
 
 - Work comparisons in `items`, `findings`, and the HTML report now give separate costs per item and per 100 changed lines, with the number of items behind each comparison. When the measures disagree, the report explains why neither group is necessarily cheaper overall.

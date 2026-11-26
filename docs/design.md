@@ -19,9 +19,10 @@ Decisions on 2026-11-26, binding for this package:
 | 「用 pi command 操作，這樣 agent 也可以自己去看」 | `/evals` (status, extract, report, mark) is the main surface, and one tool, `evals_query`, lets an agent read bounded summaries. The CLI is a thin wrapper over the same functions. |
 | 「報表的設計會很重要，要注重人類可讀性，最好是可以記錄我做出的架構調整所造成的影響」 | A change timeline (pins, model routing, rules, skills, agent roles, live version changes, manual marks) with the same numbers before and after each change. The data (ReportModel, `model.json`) is separate from the renderer; this release ships a plain renderer, and the designed one will replace it after a mockup round. |
 | 「先索引，穩定後再開清理」 | No cleanup code. `/evals status` and `evals_query coverage` report how many session files older than the cut (default 60 days without changes) the index fully covers, by count and bytes: the gate before a retention tool may delete them. Extra session roots (a future trash dir) are a setting. |
+| 「我認為應該是 /eval 當下就可以做標記，也可以讓 agent 在做錯被糾正的時候標記，這樣才有辦法正確反映當下情境」 | `/evals label` records the user's verdict on a rule in the current session, and the `evals_label` tool lets the agent log a correction it was given; see [Labels in the moment](#labels-in-the-moment-050). |
 | 「記得我對 evals 是門外漢，你的報表和標記網頁要讓我有辦法看懂」 | Every metric and detector in the ReportModel carries a label, one sentence of meaning, the better direction, one sentence on how it is computed, and for detectors a pass and a fail example, in English and Traditional Chinese. No unexplained statistics terms in what the reader sees. |
 
-Later phases, not built here, each with a seam left open: human labels (phase 2; `labels.jsonl` is joined if present), with-and-without-skill A/B runs (phase 3), and session cleanup through a retention tool once the index covers old sessions (phase 4; `extraRoots` reads its trash dir).
+Later phases, not built here, each with a seam left open: with-and-without-skill A/B runs (phase 3), and session cleanup through a retention tool once the index covers old sessions (phase 4; `extraRoots` reads its trash dir).
 
 ## Decisions
 
@@ -107,6 +108,22 @@ For error trends it compares the two seven-day periods immediately before the ex
 It counts tool errors over calls per package and job endings marked `error` over all recorded endings; both weeks need at least 20 observations and a rise of at least five percentage points.
 If several packages qualify, the largest rise wins, then the larger recent call count, then the package name.
 No flag means no rise met that rule, not proof that nothing went wrong.
+
+### Labels in the moment (0.5.0)
+
+The first 20 labelled sessions were judged after the fact from AI summaries, and the code agreed on 10 of 20 and 4 of 11.
+A summary can leave out what decided the verdict, so the gap cannot be put on the code or on the summary.
+A label given while the work is in front of the user does not have that problem, so the report keeps the two apart and shows agreement for each.
+
+`/evals label` asks three plain questions (which rule, followed or not, an optional note) and needs no arguments; the one-line form is for speed.
+A label is tied to the session and the todo item in progress, keyed as back-filled work items are, so it can later join the item.
+`undo` appends a withdrawal instead of rewriting the file, so a label another session appends at the same moment cannot be lost.
+
+The agent's `evals_label` takes two enumerated names and nothing else, and its tool text stays near 590 bytes, since every session pays for it.
+Its rows never enter the agreement: an agent's own account of being corrected is not a verdict on the code.
+They are counted as 「被糾正」 by rule, failure type, the skills loaded before the correction, and the anchorloop version at the time.
+The count covers corrections that were logged, not every mistake; with fewer than 20, the report says it is too few to show a trend.
+A label whose session is not extracted yet enters a date or project filter by its own time and project, so it shows up at once.
 
 ### Storage choices
 

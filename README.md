@@ -2,7 +2,7 @@
 
 Records of how [pi](https://github.com/earendil-works/pi) agents use skills, packages, ask-user, monitors and subagents, and whether their work follows the anchorloop process rules.
 It reads past session files once, keeps a small observer running for what those files do not hold, and builds a static HTML report.
-Agents can read the same numbers through one tool, `evals_query`.
+Agents can read the same numbers through one tool, `evals_query`, and log a correction you gave them with another, `evals_label`.
 
 ## What it records
 
@@ -14,6 +14,7 @@ Agents can read the same numbers through one tool, `evals_query`.
 - **Process**: four checks of the anchorloop rules per session, for sessions started after anchorloop 3.0.0 was pinned (2026-11-23T10:51:07Z); see [docs/design.md](docs/design.md#process-detectors).
 - **Cost**: model cost and tokens, and the cost of the sessions that loaded each skill.
 - **Work items**: each todo task from the moment it is switched to in progress until it is done or deleted: what it cost (subagents exactly, the main agent as an even share), where it closed (reviewer approval, a landed car, a wrap, evidence), where it stalled and on whom, and whether one way of working is cheaper than another of the same kind.
+- **Your labels and corrections**: your verdict on a process rule, given in the moment with `/evals label` or after the fact, and the corrections an agent logs when you correct how it worked.
 - **Your changes**: package pins, model routing, rules, skills and agent roles from the git history of your setup repositories, version changes seen live, and notes you add with `/evals mark`, each with the same numbers in the days before and after.
 
 ## Privacy
@@ -21,7 +22,8 @@ Agents can read the same numbers through one tool, `evals_query`.
 Records hold derived facts only: names (tools, skills, packages, models, roles, project keys), counts, durations, exit codes, outcomes, and token and cost numbers.
 They never hold transcript text, tool arguments, file contents, commands, questions, or answers.
 Every string written to a record must look like a name (no spaces, no line breaks, at most 160 characters), or it is stored as `redacted`.
-The one exception is a work item's title: its todo subject, cut to one line of at most 80 characters.
+There are two exceptions: a work item's title (its todo subject, cut to one line of at most 80 characters), and the note you add to your own label with `/evals label` (one line, at most 500 characters, never shown in the report or a query result).
+An agent's correction holds names only: the tool refuses any other text.
 A test plants a secret in every text field of a session and checks that it reaches no output file and no query result outside a title field.
 
 Everything stays on your machine, under `$XDG_STATE_HOME/pi-evals` (default `~/.local/state/pi-evals`).
@@ -45,6 +47,12 @@ The observer loads in every session, subagents included.
 | `/evals findings [--since YYYY-MM-DD] [--project <key>]` | Shows the report’s headline, what limits it, and where to look next. |
 | `/evals report [--since YYYY-MM-DD \| --days N] [--project <key>]` | Builds the linked date ranges, or one custom report when a start date or day count is given. |
 | `/evals mark <note>` | Adds a note to the change timeline, e.g. `/evals mark workers moved to gpt-6.2-astra`. |
+| `/evals label` | Labels the current session while the work is in front of you: pick a rule (or 「其他」), then 照做, 沒照做 or 看不出來, then an optional note in your own words. |
+| `/evals label <rule> pass\|fail\|unclear [note]` | The same in one line; `<rule>` is a check name (`anchor_before_first_edit`, `check_after_last_edit`, `todo_evidence`, `close_guard_quiet`) or `other`. |
+| `/evals label undo` | Withdraws the current session's last label given in the moment. |
+
+A label records the session, the time, and the key of the todo item in progress, if any (its `uid`, else `<session>#<id>`, as work items are keyed).
+It reaches the report and `evals_query` at their next read, without an extract.
 
 The same operations run from a shell, where extraction defaults to one fewer worker than available CPUs (at least one, at most eight).
 On either surface, `--workers 0` reads the files sequentially without worker threads:
@@ -60,12 +68,20 @@ pi-evals mark <note>
 ### The `evals_query` tool
 
 Start with `findings` (under 1,500 bytes), then follow one pointer if you need the counts.
-An agent calls `evals_query` with a `view` (`findings`, `items`, `skills`, `packages`, `ask_user`, `monitors`, `subagents`, `process`, `cost`, `changes`, `coverage`) and optional `since` and `project`.
+An agent calls `evals_query` with a `view` (`findings`, `items`, `labels`, `skills`, `packages`, `ask_user`, `monitors`, `subagents`, `process`, `cost`, `changes`, `coverage`) and optional `since` and `project`.
 The result is plain text under 2 KB, covering the latest 30 UTC dates through the last extract unless you give `since`.
 `findings` flags the biggest package error-rate rise and a rise in jobs ending in error when the later of two complete weeks is at least five percentage points higher, with at least 20 calls or endings in **each** week.
 It also counts offered skills with no loads in the selected period and checks whether all old files are indexed.
 The [analysis skill](skills/analyzing-evals/SKILL.md) includes three read-only commands for a change’s full comparison, a skill’s daily session counts, and a package’s daily errors.
 The tool never starts an extract.
+`labels` gives your labels by when they were given, how often the code checks agree with them, and the corrections agents logged; `findings` adds a line when three or more corrections share a rule and failure type.
+
+### The `evals_label` tool
+
+When you correct how an agent worked (it skipped a check, worked in the wrong order, ignored a rule), it calls `evals_label` once with `rule` (a check name or `other`) and an optional `type`: `no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction` or `other`.
+The row also keeps the session, the time, the item in progress, and the skills the session had loaded.
+The count covers corrections the agent logged, not all its mistakes.
+The tool adds about 590 bytes of tool text to each session.
 
 ## The report
 
@@ -121,7 +137,7 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
 | `index/items.json`, `index/workitems.jsonl` | Work items joined across sessions, and their `pi.workitem` and `pi.stall` records. |
 | `index/lines.json` | Cached `git diff --numstat` line counts between evidence commits. |
 | `changes.jsonl`, `marks.jsonl` | The change timeline and your notes. |
-| `labels.jsonl` | Your labels, when you add them (a later phase): `{ "session_id", "evaluation_name", "label": "pass" \| "fail" \| "unclear" }` per line. The report then shows how often you and the automatic checks agree; `unclear` labels are counted apart. |
+| `labels.jsonl` | Your labels and agents' corrections, appended one per line ([docs/schema.md](docs/schema.md#labels)). The report shows how often you and the automatic checks agree, split by labels given after the fact and in the moment; `unclear` labels are counted apart. Its 「被糾正」 section counts the corrections by rule, failure type, skill loaded and anchorloop version. |
 | `reports/report.html`, `reports/model.json` | The report. |
 
 The record format is in [docs/schema.md](docs/schema.md); the decisions behind it are in [docs/design.md](docs/design.md).

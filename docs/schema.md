@@ -52,15 +52,30 @@ Back-fill rebuilds each session's items from its `todo/v1` snapshots, diffed alo
 
 Sessions that started before 2026-11-23T10:51:07Z (the anchorloop 3.0.0 pin) get `na` with `out_of_scope_pre_3.0` for all four.
 
-## Labels (for a later phase)
+## Labels
 
-`labels.jsonl` in the state dir, one human verdict per line:
+`labels.jsonl` in the state dir is appended to, one row per line, and read at every report and query, with no extract needed.
+There are three kinds of rows:
 
 ```json
-{ "session_id": "01a2…", "evaluation_name": "anchor_before_first_edit", "label": "fail", "at": "2026-12-01T09:00:00Z", "note": "optional" }
+{ "session_id": "01a2…", "evaluation_name": "anchor_before_first_edit", "label": "fail", "at": "2026-11-26T05:51:51Z", "annotator": "human" }
+{ "session_id": "01a2…", "evaluation_name": "check_after_last_edit", "label": "fail", "at": "2026-11-26T06:00:00Z", "annotator": "human", "source": "live", "item": "MP-1234", "project": "demo-repo", "note": "optional, the user's own words" }
+{ "session_id": "01a2…", "evaluation_name": "other", "label": "fail", "at": "2026-11-26T06:10:00Z", "annotator": "agent", "source": "correction", "type": "ignored_instruction", "item": "01a2…#3", "project": "demo-repo", "skills": ["coding"] }
 ```
 
-`label` is `pass`, `fail`, or `unclear` (the reader could not tell). The report joins these with `index/session-evals.json` (the code labels per session) and shows how often they agree; `unclear` labels are left out of the agreement rate and counted on their own (「看不出來 N」).
+- A row without `source` is a human verdict given after the fact (the report calls it 事後標, the code `batch`).
+- `source: "live"` is a human verdict given in the moment with `/evals label`. `/evals label undo` appends `{ …, "source": "live", "undo": "<at of the withdrawn row>" }`, which withdraws the session's latest live row still in effect.
+- `source: "correction"` is an agent's `evals_label` call: `label` is always `fail`, and `type` is one of `no_check_stated`, `no_check_run`, `skipped_rule`, `wrong_order`, `unverified_claim`, `ignored_instruction`, `other`. The tool accepts no other field or value.
+
+`evaluation_name` is a process check name or `other`.
+`label` is `pass`, `fail`, or `unclear` (the reader could not tell).
+`item` is the key of the todo item in progress when the label was given: its `uid`, else `<origin session>#<id>` for a task carried over from another session, else `<session>#<id>`.
+`note` is the only free text and is never shown in the report or a query result.
+
+The report joins human rows with `index/session-evals.json` (the code labels per session) and shows how often they agree, by when the labels were given.
+`unclear` labels are left out of the agreement rate and counted on their own (「看不出來 N」); labels on `other`, or on a session the code has not judged, are counted apart.
+Agent rows never enter the agreement; they make the 「被糾正」 section.
+With a date or project filter, a row belongs to the range by its session's start when the session is indexed, and by its own `at` and `project` otherwise.
 
 ## Change timeline
 
