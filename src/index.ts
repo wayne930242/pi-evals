@@ -50,14 +50,14 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		});
 		let running: Promise<void> | undefined;
 
-		const extractInChild = (ctx: ExtensionCommandContext): Promise<void> => {
+		const extractInChild = (ctx: ExtensionCommandContext, workers: number): Promise<void> => {
 			const cli = cliPath();
 			if (!cli) {
 				ctx.ui.notify("pi-evals: cannot find its CLI (dist/cli.js); run npm run build in the package.", "error");
 				return Promise.resolve();
 			}
 			return new Promise<void>((resolve) => {
-				const child = spawnFn(cli.cmd, [...cli.args, "extract", "--json"], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
+				const child = spawnFn(cli.cmd, [...cli.args, "extract", "--json", "--workers", String(workers)], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
 				let buffer = "";
 				let last = "";
 				let errText = "";
@@ -109,8 +109,13 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 						ctx.ui.notify("pi-evals: an extract is already running.", "warning");
 						return;
 					}
+					const workers = words.length === 1 ? 2 : words.length === 3 && words[1] === "--workers" && /^\d+$/.test(words[2]) ? Number(words[2]) : NaN;
+					if (!Number.isSafeInteger(workers)) {
+						ctx.ui.notify("Usage: /evals extract [--workers <non-negative integer>]", "warning");
+						return;
+					}
 					ctx.ui.notify("pi-evals: extract started in the background; progress shows in the footer.", "info");
-					running = extractInChild(ctx).finally(() => {
+					running = extractInChild(ctx, workers).finally(() => {
 						running = undefined;
 					});
 				} else if (sub === "report") {

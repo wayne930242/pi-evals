@@ -166,9 +166,15 @@ test("/evals status, report, mark, and extract", async () => {
 	await cmd.handler("extract", h.ctx);
 	await new Promise((r) => setTimeout(r, 20));
 	assert.equal(h.spawned.length, 1);
-	assert.deepEqual(h.spawned[0].slice(-2), ["extract", "--json"]);
+	assert.deepEqual(h.spawned[0].slice(-4), ["extract", "--json", "--workers", "2"]);
+	await cmd.handler("extract --workers 1", h.ctx);
+	assert.deepEqual(h.spawned[1].slice(-4), ["extract", "--json", "--workers", "1"]);
+	await new Promise((r) => setImmediate(r));
+	await cmd.handler("extract --workers -1", h.ctx);
+	assert.equal(h.spawned.length, 2);
+	assert.match(h.notes.at(-1)?.text ?? "", /non-negative integer/);
 	assert.ok(h.statuses.some((s) => s?.includes("1/2 files")));
-	assert.match(h.notes.at(-1)?.text ?? "", /extracted 2 changed of 2 files/);
+	assert.ok(h.notes.some(n=>n.text.includes("extracted 2 changed of 2 files")));
 });
 
 test("evals_query answers every view within the size bound, names staleness, and rejects bad input", async () => {

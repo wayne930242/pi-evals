@@ -82,6 +82,17 @@ The ReportModel holds every number with its n and window, and the plain-language
 The HTML has no scripts, no network and no external assets, uses inline SVG, and follows the system's light or dark setting.
 It renders in Traditional Chinese by default (`--lang en` for English).
 
+Version 0.2.0 uses the timeline and comparison layouts selected on 2026-11-26.
+The renderer makes the following editorial choices from the model, without consulting transcripts or fetching data:
+
+- A pin or routing change qualifies for the front page even without a comparison; another change qualifies only if both windows have at least 20 sessions.
+- The headline gives priority to a change to the process rules themselves: an anchorloop pin within seven days of the latest change with at least 20 applicable sessions on both sides of the anchor check. Otherwise take the newest qualifying comparison with enough sessions, then the newest qualifying change. With no candidate, report why there is nothing to compare.
+- Show the lead and at most one earlier change from a different commit. Prefer a small sample with records on both sides (to show why the numbers might mislead), then a pin or routing change with a complete window, then the next eligible change. Order the cards by time. Keep every other entry in its UTC day’s disclosure, with a direct link to its detail; no truncation.
+- For an anchorloop pin with two comparable readings of the anchor check, compare the two process rates. Otherwise use the package error rate when available on both sides, or the overall tool error rate, alongside cost per session. Rates use their own denominators, not the total session count. A missing value is a dash, not zero.
+- The headline names the first comparable reading and whether it rose, fell or held steady at the displayed precision. A short window, small sample or overlapping change qualifies that observation. The verdict lists every applicable caveat, including a displayed reading based on fewer than 20 applicable observations on either side. Only a complete, unconfounded comparison with enough observations and a visible difference says there was an observable change. Even that is not a causal claim.
+- The workload chart covers the last seven complete UTC dates in the report period (or fewer if the filter starts later), not seven nonempty days. Each marker means at least one change that day. Session and tool totals in the other sections still cover the selected report period.
+- Each detail uses the model’s actual window and session counts. Dates with records may exceed seven in a seven-day window that starts mid-day. The ruler shows the last extract only when it falls inside the after window, and its segments are not to scale.
+
 ### Storage choices
 
 JSON lines and JSON files, no database: the index is rebuilt from per-session summaries in about a second, and the reader needs no service (research §4: everything reduces to files plus one static page).

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- The report opens on two architecture changes, with a workload chart and a comparison you can open for every entry in the timeline. Each comparison shows what was counted and what limits the conclusion.
+- Five short explanations and two self-check questions introduce the numbers in the report; see [the worked example](docs/learn.zh-TW.md).
+- `/evals extract` uses two workers by default to leave memory for pi. Pass `--workers N` to override; the standalone CLI retains its CPU-based default.
+- Use npm’s canonical bin path so the packed CLI installs as `pi-evals` without a publish correction.
+
 ## 0.1.0
 
 First release.

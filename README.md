@@ -39,11 +39,12 @@ The observer loads in every session, subagents included.
 | Command | What it does |
 | --- | --- |
 | `/evals` or `/evals status` | Record counts, the last extract, index coverage of old sessions, and the report path. |
-| `/evals extract` | Back-fills past sessions in a background process; progress shows in the footer. Only files whose size or modification time changed are read again. |
+| `/evals extract [--workers N]` | Back-fills changed sessions in a background process, with two workers by default to leave memory for pi. Progress shows in the footer. |
 | `/evals report [--since YYYY-MM-DD] [--project <key>]` | Builds the report and prints its path. |
 | `/evals mark <note>` | Adds a note to the change timeline, e.g. `/evals mark workers moved to gpt-6.2-astra`. |
 
-The same operations run from a shell:
+The same operations run from a shell, where extraction defaults to one fewer worker than available CPUs (at least one, at most eight).
+On either surface, `--workers 0` reads the files sequentially without worker threads:
 
 ```sh
 pi-evals extract [--root <dir>]... [--workers <n>] [--json]
@@ -64,7 +65,16 @@ The tool never starts an extract.
 One HTML file with no scripts, no network requests and no external assets; charts are inline SVG, and it follows the system's light or dark setting.
 It is written as `report.html` next to `model.json`, the ReportModel it is rendered from.
 Every number in the model carries a plain-language label, what it means, which direction is better, and how it is computed, in English and Traditional Chinese.
-The renderer reads only the model, so a redesigned report can replace it without touching the data.
+### Reading the report
+
+Start with the sentence above the timeline: it says what changed in the numbers; the next line tells you what limits the comparison.
+Open a card to see which sessions started before and after the change.
+Read the count beside each rate: a check that applies to 48 sessions can say nothing about the other 116 sessions in a group of 164.
+If the window is short, or other changes landed in the same period, do not credit a difference to the new version alone.
+
+The sidebar shows workload for the last seven complete UTC dates, with markers on days you changed the setup.
+The date disclosures keep the rest of the timeline available without putting hundreds of cards on the first screen.
+Use the section links for usage, process checks, cost and cleanup coverage, or read the [five concepts with a worked example](docs/learn.zh-TW.md).
 
 ## Settings
 
