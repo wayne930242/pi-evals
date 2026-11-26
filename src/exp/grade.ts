@@ -62,6 +62,25 @@ export function findLeak(entries: unknown[], forbidden: string[]): string | unde
 
 const textOf = (content: unknown) => (Array.isArray(content) ? (content as Part[]).filter((p) => p?.type === "text").map((p) => p.text ?? "").join("\n") : typeof content === "string" ? content : "");
 
+/** The last assistant text of each user turn: the answer of the first run, then the reply to each follow-up. */
+export function replies(entries: unknown[]): string[] {
+	const out: string[] = [];
+	let last: string | undefined;
+	for (const raw of entries) {
+		const message = (raw as Entry)?.message;
+		if ((raw as Entry)?.type !== "message" || !message) continue;
+		if (message.role === "user") {
+			if (last !== undefined) out.push(last);
+			last = undefined;
+		} else if (message.role === "assistant") {
+			const text = textOf(message.content).trim();
+			if (text) last = text;
+		}
+	}
+	if (last !== undefined) out.push(last);
+	return out;
+}
+
 export function finalText(entries: unknown[]): string {
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const message = (entries[i] as Entry)?.message;
@@ -140,7 +159,8 @@ export function gradeTranscript(entries: unknown[], options: { kind: Kind; forbi
 	for (const entry of entries) if (tracker.feed(entry)) notices++;
 	const process = Object.fromEntries(tracker.results(true).map((r) => [r.name, r])) as Record<DetectorName, DetectorResult>;
 	const edits = successfulEdits(entries);
-	const text = finalText(entries);
+	// Graded on every turn's reply: a follow-up's short "Done." must not hide the answer given before it.
+	const text = replies(entries).join("\n\n");
 	return {
 		process,
 		edits,

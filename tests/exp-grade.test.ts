@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claimsDone, efficiency, findLeak, finalText, gradeTranscript, promptCreditsAnchor, shouldNotOutcome, successfulEdits } from "../src/exp/grade.ts";
+import { claimsDone, efficiency, findLeak, finalText, gradeTranscript, promptCreditsAnchor, replies, shouldNotOutcome, successfulEdits } from "../src/exp/grade.ts";
 
 let n = 0;
 const user = (text: string) => ({ type: "message", message: { role: "user", content: [{ type: "text", text }] } });
@@ -43,6 +43,14 @@ test("done claim: fixed zh and en phrases, not a hedge", () => {
 	assert.ok(!claimsDone("I could not get the tests to run."));
 	assert.ok(!claimsDone("Tests still fail; not done."));
 	assert.ok(!claimsDone("測試沒有通過，尚未完成。"));
+});
+
+test("replies: the last assistant text of each user turn, so a follow-up's short reply keeps the answer", () => {
+	const entries = [user("Why is it big?"), assistant(text("Let me look at editor code.")), assistant(text("The answer: probability and editor.")), user("Anything left?"), assistant(text("Done."))];
+	assert.deepEqual(replies(entries), ["The answer: probability and editor.", "Done."]);
+	const g = gradeTranscript(entries, { kind: "should_not", forbidden: [] });
+	assert.match(g.finalText, /probability and editor[\s\S]*Done\./);
+	assert.ok(!g.finalText.includes("Let me look"));
 });
 
 test("final text is the last assistant text", () => {
