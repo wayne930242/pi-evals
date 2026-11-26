@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- The report has a 「工作」 section: every todo item with its cost (subagents exact, main agent split evenly among items in progress at the same time), minutes in progress, how it closed (reviewer approval, a landed car, a wrap, evidence) and where it stalled, by what woke the main agent. A comparison of like with like says whether one model, role or anchorloop version costs less per item and per 100 changed lines, or that there are too few items to tell. Open items show where they stopped, on whom they wait, and for how long. Two concept cards explain cost attribution and fair comparison with this report's numbers.
+- Back-fill rebuilds work items from `todo/v1` snapshots, never merging tasks across a `clear` or a `/tree` branch, and writes `pi.workitem` and `pi.stall` records. It reads todo `uid`, `origin` and evidence `ref`, the review thread's `item` and `closed`, and the sb ledger when they exist, and joins by names otherwise.
+- A work item's title (its todo subject, at most 80 characters) is the only source text pi-evals stores.
+- `evals_query` has an `items` view, and `findings` adds a line when a like-with-like difference or a long wait stands out.
+- A label of `unclear` is left out of the agreement rate and counted on its own (「看不出來」).
+- Re-extracts every session once (extractor version 3).
+
 ## 0.3.0
 
 - Open the report on the last 30 days and switch to 14 days, 90 days or all time without scripts. For other dates use `--since` or `--days`.

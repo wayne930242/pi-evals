@@ -13,6 +13,7 @@ Agents can read the same numbers through one tool, `evals_query`.
 - **Subagents**: launches by role and model, and their cost by role.
 - **Process**: four checks of the anchorloop rules per session, for sessions started after anchorloop 3.0.0 was pinned (2026-11-23T10:51:07Z); see [docs/design.md](docs/design.md#process-detectors).
 - **Cost**: model cost and tokens, and the cost of the sessions that loaded each skill.
+- **Work items**: each todo task from the moment it is switched to in progress until it is done or deleted: what it cost (subagents exactly, the main agent as an even share), where it closed (reviewer approval, a landed car, a wrap, evidence), where it stalled and on whom, and whether one way of working is cheaper than another of the same kind.
 - **Your changes**: package pins, model routing, rules, skills and agent roles from the git history of your setup repositories, version changes seen live, and notes you add with `/evals mark`, each with the same numbers in the days before and after.
 
 ## Privacy
@@ -20,7 +21,8 @@ Agents can read the same numbers through one tool, `evals_query`.
 Records hold derived facts only: names (tools, skills, packages, models, roles, project keys), counts, durations, exit codes, outcomes, and token and cost numbers.
 They never hold transcript text, tool arguments, file contents, commands, questions, or answers.
 Every string written to a record must look like a name (no spaces, no line breaks, at most 160 characters), or it is stored as `redacted`.
-A test plants a secret in every text field of a session and checks that it reaches no output file and no query result.
+The one exception is a work item's title: its todo subject, cut to one line of at most 80 characters.
+A test plants a secret in every text field of a session and checks that it reaches no output file and no query result outside a title field.
 
 Everything stays on your machine, under `$XDG_STATE_HOME/pi-evals` (default `~/.local/state/pi-evals`).
 Session files are only read, never written.
@@ -58,7 +60,7 @@ pi-evals mark <note>
 ### The `evals_query` tool
 
 Start with `findings` (under 1,500 bytes), then follow one pointer if you need the counts.
-An agent calls `evals_query` with a `view` (`findings`, `skills`, `packages`, `ask_user`, `monitors`, `subagents`, `process`, `cost`, `changes`, `coverage`) and optional `since` and `project`.
+An agent calls `evals_query` with a `view` (`findings`, `items`, `skills`, `packages`, `ask_user`, `monitors`, `subagents`, `process`, `cost`, `changes`, `coverage`) and optional `since` and `project`.
 The result is plain text under 2 KB, covering the latest 30 UTC dates through the last extract unless you give `since`.
 `findings` flags the biggest package error-rate rise and a rise in jobs ending in error when the later of two complete weeks is at least five percentage points higher, with at least 20 calls or endings in **each** week.
 It also counts offered skills with no loads in the selected period and checks whether all old files are indexed.
@@ -116,8 +118,10 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
 | `index/days.json` | Aggregates by day and project. |
 | `index/sessions.json` | A few numbers per session with its start time, for splitting sessions at a change's time. |
 | `index/session-evals.json` | Process check results per session, for joining your labels. |
+| `index/items.json`, `index/workitems.jsonl` | Work items joined across sessions, and their `pi.workitem` and `pi.stall` records. |
+| `index/lines.json` | Cached `git diff --numstat` line counts between evidence commits. |
 | `changes.jsonl`, `marks.jsonl` | The change timeline and your notes. |
-| `labels.jsonl` | Your labels, when you add them (a later phase): `{ "session_id", "evaluation_name", "label": "pass" \| "fail" }` per line. The report then shows how often you and the automatic checks agree. |
+| `labels.jsonl` | Your labels, when you add them (a later phase): `{ "session_id", "evaluation_name", "label": "pass" \| "fail" \| "unclear" }` per line. The report then shows how often you and the automatic checks agree; `unclear` labels are counted apart. |
 | `reports/report.html`, `reports/model.json` | The report. |
 
 The record format is in [docs/schema.md](docs/schema.md); the decisions behind it are in [docs/design.md](docs/design.md).

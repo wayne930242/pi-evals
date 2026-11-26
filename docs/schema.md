@@ -16,7 +16,7 @@ The envelope is shaped so a replay to an OTLP backend needs no renaming.
 | `trace_id` | 32 hex | One trace per user prompt: everything from one prompt to the next. Stable across re-extraction. |
 | `span_id` | 16 hex | Stable id derived from the session id and the entry or tool call id. |
 | `source` | `"backfill"` \| `"live"` | Which reader wrote it. |
-| `attrs` | object | Attributes. Strings must look like names (letters, digits, `_@./:+#=\|-`, at most 160 characters); anything else is stored as `redacted`. |
+| `attrs` | object | Attributes. Strings must look like names (letters, digits, `_@./:+#=\|-`, at most 160 characters); anything else is stored as `redacted`. The one exception is `pi.item.title`: a todo subject, cut to one line of at most 80 characters. |
 
 Every record carries `session.id` (the pi session id from the session header) and `pi.project` (a short project key: the repository name for `~/projects/<repo>/…` and for Herdr worktrees, else the first path segment).
 
@@ -34,6 +34,12 @@ Every record carries `session.id` (the pi session id from the session header) an
 | `pi.compaction` | event | A compaction entry in the session. |
 | `pi.tools.snapshot` | event | Live, once per session at the first prompt: `pi.tools`, a sorted list of `tool=owner@version`. |
 | `pi.skills.available` | event | Live, once per session: `pi.skills`, the names of the skills pi offered. |
+| `pi.workitem` | span | One per todo task (written to `index/workitems.jsonl` on every build). `ts` = the first switch to `in_progress` (else creation), `end_ts` = completed or deleted, `duration_ms` = time in progress. `pi.item.key` (todo `uid`, else `<origin session>#<id>` for an import, else `<session id>#<id>`, with `.2`, `.3` when a `clear` reuses an id and `@<entry8>` for a task only on an abandoned `/tree` branch), `pi.item.title`, `pi.item.owner`, `pi.item.level` (`top` \| `nested` for a subagent's own list), `pi.item.status`, `pi.item.created`, `pi.item.close_kind` (`review_done` \| `landed` \| `wrap` \| `evidence` \| `unproven` \| `deleted` \| `open`), `pi.item.thread` (`T<n>`), `pi.item.evidence_n`, `pi.item.blocked_by_n`, `pi.usage.cost_usd` (main cost in the window, each reply split evenly among the items in progress at that moment), `pi.item.child_cost_usd` (exact cost of the joined subagent sessions), `pi.item.children` (their names), `pi.item.lines_changed` (git, from the previous item's last evidence commit in the same repository), `pi.item.sessions` (when a uid or import carried it across sessions). |
+| `pi.stall` | span | A main idle of two minutes or more inside an item's window. `pi.item.key`, `pi.stall.kind` by what woke the main (`human` \| `peer` \| `child` \| `timer` \| `ci` \| `device`), `pi.stall.on` (a subagent name, a peer session's first 13 characters, or from the sb ledger `W<n>`, `L<n>`, `T<n>`), `pi.stall.via` (`idle` \| `ask` for a question tool held open). `duration_ms` is the part inside the item's window. |
+
+### Work items
+
+Back-fill rebuilds each session's items from its `todo/v1` snapshots, diffed along the entry tree. When producers add them, it reads todo `uid`, `origin.session` and evidence `ref` (`child:<id>` joins a subagent), `subagent` `details.item`, `boss_pair` `item`, the sb thread fields `item` and `closed`, and the sb ledger (`~/.pi/agent/straw-boss/ledger/*.jsonl`); without them it joins by names: a subagent whose name is the task owner, a reviewer `<prefix>-review*`, the sb thread whose worker is the owner, and a car whose coordinator is the session (ticket ids in the title must match). Close kind takes the first that holds: the linked thread's `done` within five minutes of the close, a car landed in the window, a successful `boss_wrap` around the close, evidence rows, else `unproven`.
 
 ### Process detectors
 
