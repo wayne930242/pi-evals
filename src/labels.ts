@@ -16,7 +16,8 @@ export const VERDICTS = ["pass", "fail", "unclear"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 export const FAILURE_TYPES = ["no_check_stated", "no_check_run", "skipped_rule", "wrong_order", "unverified_claim", "ignored_instruction", "other"] as const;
 export type FailureType = (typeof FAILURE_TYPES)[number];
-export type LabelSource = "batch" | "live" | "correction";
+/** `live-prompt`: the user's words after `/evals label`, which the agent turned into rows on the user's behalf. */
+export type LabelSource = "batch" | "live" | "live-prompt" | "correction";
 export const NOTE_MAX = 500;
 
 const t = (en: string, zh: string): Text => ({ en, zh });
@@ -51,8 +52,9 @@ export interface LabelRow {
 	undo?: string;
 }
 
-export const sourceOf = (row: LabelRow): LabelSource => row.source ?? "batch";
-const isLive = (row: LabelRow) => row.source === "live" && row.annotator === "human" && !row.undo;
+/** A human label given in the moment: typed, or formatted by the agent from the user's words. */
+export const givenLive = (row: LabelRow) => row.source === "live" || row.source === "live-prompt";
+const isLive = (row: LabelRow) => givenLive(row) && row.annotator === "human" && !row.undo;
 
 function parse(file: string): LabelRow[] {
 	if (!existsSync(file)) return [];
@@ -116,14 +118,26 @@ export function itemOnBranch(branch: readonly unknown[] | undefined, session: st
 	return undefined;
 }
 
-/** The agent's correction arguments: known names only, nothing else. Throws on any other field or value. */
-export function agentLabel(params: unknown): { rule: Rule; type?: FailureType } {
+/**
+ * `evals_label` arguments: known names only, nothing else; throws on any other field or value. Without `on_behalf`
+ * the row is the agent's own correction, a fail; `on_behalf: "user"` is accepted only while `speaking` (a
+ * `/evals label <words>` turn of this session is running), and then needs the user's verdict.
+ */
+export function agentLabel(params: unknown, speaking: boolean): { rule: Rule; label: Verdict; type?: FailureType; onBehalf: boolean } {
 	const p = (params && typeof params === "object" ? params : {}) as Record<string, unknown>;
-	const extra = Object.keys(p).filter((k) => k !== "rule" && k !== "type");
-	if (extra.length) throw new Error(`evals_label takes only rule and type, not ${extra.map((k) => safeName(k)).join(", ")}.`);
+	const extra = Object.keys(p).filter((k) => !["rule", "label", "type", "on_behalf"].includes(k));
+	if (extra.length) throw new Error(`evals_label takes only rule, label, type and on_behalf, not ${extra.map((k) => safeName(k)).join(", ")}.`);
 	if (!RULES.includes(p.rule as Rule)) throw new Error(`rule must be one of: ${RULES.join(", ")}.`);
 	if (p.type !== undefined && !FAILURE_TYPES.includes(p.type as FailureType)) throw new Error(`type must be one of: ${FAILURE_TYPES.join(", ")}.`);
-	return { rule: p.rule as Rule, type: p.type as FailureType | undefined };
+	if (p.on_behalf !== undefined && p.on_behalf !== "user") throw new Error('on_behalf can only be "user".');
+	const onBehalf = p.on_behalf === "user";
+	if (onBehalf && !speaking) throw new Error('on_behalf "user" is valid only during a /evals label turn the user started in this session; log your own correction without it.');
+	if (onBehalf ? !VERDICTS.includes(p.label as Verdict) : p.label !== undefined && p.label !== "fail") {
+		throw new Error(onBehalf ? "label must be the user's verdict: pass, fail or unclear." : "Your own correction is always a fail; a pass or unclear verdict is the user's, given through /evals label.");
+	}
+	const label = (p.label as Verdict | undefined) ?? "fail";
+	if (p.type !== undefined && label !== "fail") throw new Error("type names the kind of slip, so it goes only with a fail.");
+	return { rule: p.rule as Rule, label, type: p.type as FailureType | undefined, onBehalf };
 }
 
 export interface LabelScope {
@@ -162,7 +176,7 @@ export function labelsModel(labelsFile: string, evalsFile: string, scope: LabelS
 	const sessions = { batch: new Set<string>(), live: new Set<string>() };
 	const out = { ...empty, present: true, n: human.length };
 	for (const row of human) {
-		const source = sourceOf(row) === "live" ? "live" : "batch";
+		const source = givenLive(row) ? "live" : "batch";
 		out.bySource[source] += 1;
 		sessions[source].add(row.session_id);
 		if (row.evaluation_name === "other") {

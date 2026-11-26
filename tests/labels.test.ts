@@ -32,6 +32,7 @@ function setup(session = "01a2aaaa-0000-7000-8000-000000000001", sharedState?: s
 	const notes: string[] = [];
 	const answers: (string | undefined)[] = [];
 	const asked: { kind: string; title: string; options?: string[] }[] = [];
+	const sent: { text: string; options?: unknown }[] = [];
 	let branch: unknown[] = [];
 	const clock = { t: Date.parse("2026-11-26T06:00:00.000Z") };
 	const pi = {
@@ -40,10 +41,12 @@ function setup(session = "01a2aaaa-0000-7000-8000-000000000001", sharedState?: s
 		registerTool: (t: ToolDefinition) => tools.set(t.name, t),
 		registerCommand: (_name: string, c: typeof command) => (command = c),
 		getAllTools: () => [],
+		sendUserMessage: (text: string, options?: unknown) => sent.push({ text, options }),
 	} as unknown as ExtensionAPI;
 	createEvals({ env, now: () => clock.t })(pi);
 	const ctx = {
 		hasUI: true,
+		isIdle: () => true,
 		cwd: join(home, "projects", "demo-repo"),
 		ui: {
 			notify: (text: string) => notes.push(text),
@@ -58,7 +61,7 @@ function setup(session = "01a2aaaa-0000-7000-8000-000000000001", sharedState?: s
 	};
 	const labelsFile = join(state, "labels.jsonl");
 	return {
-		home, env, state, notes, asked, answers, clock, ctx, fire, labelsFile,
+		home, env, state, notes, asked, answers, sent, clock, ctx, fire, labelsFile,
 		setBranch: (b: unknown[]) => (branch = b),
 		run: (args: string) => command!.handler(args, ctx),
 		tool: (name: string) => tools.get(name)!,
@@ -95,11 +98,10 @@ test("/evals label with arguments records a live human row with the in-progress 
 	h.setBranch([]);
 	await h.run("label todo_evidence pass");
 	assert.equal(h.raw()[2].item, undefined);
-	// A wrong rule or verdict writes nothing and says how to use it.
-	await h.run("label nope fail");
+	// Anything else is the user's own words for the agent to format; the command itself writes nothing.
 	await h.run("label todo_evidence maybe");
 	assert.equal(h.raw().length, 3);
-	assert.match(h.notes.at(-1)!, /\/evals label/);
+	assert.equal(h.sent.length, 1);
 });
 
 test("/evals label without arguments asks for the rule, the verdict and an optional note in plain words", async () => {
@@ -177,17 +179,18 @@ test("evals_label records an agent correction with names only and rejects free t
 		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "check_after_last_edit", label: "fail", at: "2026-11-26T06:00:00.000Z", annotator: "agent", source: "correction", type: "no_check_run", item: "01a2aaaa-0000-7000-8000-000000000001#4", project: "demo-repo", skills: ["coding"] },
 		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "other", label: "fail", at: "2026-11-26T06:00:00.000Z", annotator: "agent", source: "correction", item: "01a2aaaa-0000-7000-8000-000000000001#4", project: "demo-repo", skills: ["coding"] },
 	]);
-	// A planted string in any field, or any field beyond rule and type, is refused and writes nothing.
+	// A planted string in any field, or any other field, is refused and writes nothing.
 	await assert.rejects(exec({ rule: SECRET }), /rule must be/);
 	await assert.rejects(exec({ rule: "other", type: SECRET }), /type must be/);
-	await assert.rejects(exec({ rule: "other", note: SECRET }), /only rule and type/);
-	await assert.rejects(exec({ rule: "other", label: "pass" }), /only rule and type/);
+	await assert.rejects(exec({ rule: "other", note: SECRET }), /only rule, label, type and on_behalf/);
+	await assert.rejects(exec({ rule: "other", label: "pass" }), /always a fail/);
+	await assert.rejects(exec({ rule: "other", on_behalf: SECRET }), /on_behalf/);
 	assert.equal(h.raw().length, 2);
 	assert.ok(!readFileSync(h.labelsFile, "utf8").includes("PLANTED"));
 	// Small on purpose: every session pays for the tool's text.
 	const text = tool.description + (tool.promptSnippet ?? "") + JSON.stringify(tool.parameters);
 	assert.ok(tool.description.length <= 200, `description ${tool.description.length}`);
-	assert.ok(Buffer.byteLength(text) < 650, `tool text ${Buffer.byteLength(text)} bytes`);
+	assert.ok(Buffer.byteLength(text) < 720, `tool text ${Buffer.byteLength(text)} bytes`);
 });
 
 /** A one-day index whose sessions s1..s3 are indexed (hashed ids), plus code verdicts for them. */
@@ -293,4 +296,55 @@ test("the labels view and a findings line give names and numbers, never a note",
 	assert.match(findings(m), /Corrections logged: 3 of 4 are check_after_last_edit\/no_check_run .*→ labels/);
 	assert.doesNotMatch(findings(labelled(rows.slice(0, 4))), /Corrections logged/, "two of a kind is not a cluster");
 	assert.ok(VIEWS.includes("labels"));
+});
+
+test("/evals label <your words> has the agent format them into labels for you, only during that turn", async () => {
+	const h = setup();
+	await h.fire("session_start");
+	const words = "剛剛沒先跑測試就說完成";
+	await h.run(`label ${words}`);
+	assert.equal(h.raw().length, 0, "the command writes nothing itself");
+	assert.equal(h.sent.length, 1);
+	const prompt = h.sent[0].text;
+	assert.ok(prompt.includes(words));
+	assert.match(prompt, /evals_label/);
+	assert.match(prompt, /on_behalf/);
+	assert.match(h.notes.at(-1)!, /交給代理人/);
+	const tool = h.tool("evals_label");
+	const exec = (params: Record<string, unknown>) => tool.execute("id", params as never, undefined, undefined, h.ctx as never);
+	// Before the turn starts there is nothing to speak for.
+	await assert.rejects(exec({ rule: "check_after_last_edit", label: "fail", on_behalf: "user" }), /on_behalf/);
+	await h.fire("before_agent_start", { messageType: "user", prompt });
+	await exec({ rule: "check_after_last_edit", label: "fail", type: "unverified_claim", on_behalf: "user" });
+	await exec({ rule: "anchor_before_first_edit", label: "unclear", on_behalf: "user" });
+	await assert.rejects(exec({ rule: "other", label: "fail", on_behalf: "user", note: "agent text" }), /only rule, label, type and on_behalf/);
+	await assert.rejects(exec({ rule: "other", label: "maybe", on_behalf: "user" }), /label must be/);
+	await assert.rejects(exec({ rule: "other", on_behalf: "user" }), /label must be/);
+	await assert.rejects(exec({ rule: "other", label: "pass", type: "wrong_order", on_behalf: "user" }), /type .*fail/);
+	await h.fire("agent_end", {});
+	assert.deepEqual(h.raw(), [
+		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "check_after_last_edit", label: "fail", at: "2026-11-26T06:00:00.000Z", annotator: "human", source: "live-prompt", type: "unverified_claim", project: "demo-repo", note: words },
+		{ session_id: "01a2aaaa-0000-7000-8000-000000000001", evaluation_name: "anchor_before_first_edit", label: "unclear", at: "2026-11-26T06:00:00.000Z", annotator: "human", source: "live-prompt", project: "demo-repo", note: words },
+	]);
+	// After the turn the same call cannot claim to be the user's, and an agent's own label is a fail only.
+	await assert.rejects(exec({ rule: "check_after_last_edit", label: "fail", on_behalf: "user" }), /on_behalf/);
+	await assert.rejects(exec({ rule: "check_after_last_edit", label: "pass" }), /fail/);
+	await assert.rejects(exec({ rule: "other", on_behalf: "agent" }), /on_behalf/);
+	await exec({ rule: "check_after_last_edit", label: "fail" });
+	assert.equal(h.raw().at(-1).annotator, "agent");
+	assert.equal(h.raw().length, 3);
+	// A message from another session's command does not open this one.
+	const other = setup("01a2bbbb-0000-7000-8000-000000000002", h.state);
+	await other.fire("session_start");
+	await other.fire("before_agent_start", { messageType: "user", prompt: "unrelated" });
+	await assert.rejects(other.tool("evals_label").execute("id", { rule: "other", label: "fail", on_behalf: "user" } as never, undefined, undefined, other.ctx as never), /on_behalf/);
+	// The rows count as labels given in the moment, and undo withdraws them like any live label.
+	await h.run("label undo");
+	assert.deepEqual(readLabels(h.labelsFile).map((r) => r.evaluation_name), ["check_after_last_edit", "check_after_last_edit"]);
+});
+
+test("a label written for you by the agent counts as given in the moment", () => {
+	const m = labelled([human("s1", "anchor_before_first_edit", "pass", { source: "live-prompt", note: "x" })]);
+	assert.deepEqual(m.labels.bySource, { batch: 0, live: 1 });
+	assert.equal(m.labels.agreement[0].bySource.live.agree, 1);
 });
