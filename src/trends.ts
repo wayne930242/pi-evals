@@ -47,7 +47,7 @@ function rise(before: Count | undefined, after: Count) {
 }
 export function weeklyRises(index: DaysIndex, since?: string, project?: string) {
 	const rows = recentDays(index, project);
-	if (rows.length !== 14 || (since && since > rows[0].day)) return;
+	if (rows.length !== 14 || (since && Date.parse(rows[0].day) < Date.parse(since) - 86400000)) return;
 	const prev = week(index, rows.slice(0, 7)), curr = week(index, rows.slice(7));
 	const packages = [...curr.packages].flatMap(([name, count]) => {
 		const r = rise(prev.packages.get(name), count);
