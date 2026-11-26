@@ -30,6 +30,11 @@ test("leak: a tool call touching a forbidden path is found, the work dir is not"
 	// A prefix of another directory name is not the same directory.
 	const sibling = [assistant(call("b1", "bash", { command: "ls /Users/x/projects/pi-evals-other" })), result("b1")];
 	assert.equal(findLeak(sibling, forbidden), undefined);
+	// Text written into a file or a todo names a path without touching it.
+	const written = [assistant(call("e1", "edit", { path: "SKILL.md", edits: [{ oldText: "a", newText: "/Users/x/projects/pi-evals/scripts" }] }), call("t1", "todo", { subject: "/Users/x/projects/pi-evals" })), result("e1"), result("t1")];
+	assert.equal(findLeak(written, forbidden), undefined);
+	const editThere = [assistant(call("e1", "edit", { path: "/Users/x/projects/pi-evals/src/a.ts", edits: [] })), result("e1")];
+	assert.match(findLeak(editThere, forbidden) ?? "", /edit/);
 });
 
 test("done claim: fixed zh and en phrases, not a hedge", () => {

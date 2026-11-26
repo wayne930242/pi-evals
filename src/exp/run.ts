@@ -34,6 +34,7 @@ export interface RunMeta {
 	extensions: string[];
 	model: string;
 	thinking: string;
+	followUp?: string;
 	pi?: string;
 	k: number;
 	tasks: string[];
@@ -94,6 +95,7 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 		extensions: suite.extensions,
 		model: suite.model,
 		thinking: suite.thinking,
+		...(suite.followUp ? { followUp: suite.followUp } : {}),
 		pi: safe(() => execFileSync(options.piBin ?? "pi", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()),
 		k: options.k,
 		tasks: tasks.map((t) => t.id),
@@ -126,6 +128,8 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 			record = await runTrial(spec);
 		}
 		if (record.quota) stopped = `quota refusal in ${job.task.id}/${job.arm}/${job.n}`;
+		// pi that wrote no session did not start (a bad flag, a missing extension file): every later trial would fail too.
+		else if (record.invalid === "no_session") stopped = `pi wrote no session in ${job.task.id}/${job.arm}/${job.n}; see its stderr.txt`;
 		appendFileSync(join(runDir, "results.jsonl"), `${JSON.stringify(record)}\n`);
 		records.push(record);
 		finished++;

@@ -46,6 +46,8 @@ export interface Suite {
 	thinking: string;
 	/** Paths no trial may touch, besides each task's repo and leak_paths. */
 	forbidden: string[];
+	/** One identical follow-up message sent to every trial after its first run settles (resumes the same session). */
+	followUp?: string;
 	/** Extensions every arm loads (the todo ledger). */
 	extensions: string[];
 	arms: Map<string, Arm>;
@@ -65,7 +67,7 @@ function json<T>(file: string): T {
 export function loadSuite(dir: string): Suite {
 	const root = resolve(dir);
 	const abs = (p: string) => (isAbsolute(p) ? p : join(root, p));
-	const meta = json<{ model?: string; thinking?: string; forbidden?: string[]; extensions?: string[] }>(join(root, "suite.json"));
+	const meta = json<{ model?: string; thinking?: string; forbidden?: string[]; extensions?: string[]; followUp?: string }>(join(root, "suite.json"));
 	if (!meta.model || !meta.thinking) throw new Error(`${root}/suite.json: model and thinking are required`);
 	const arms = new Map<string, Arm>();
 	for (const file of readdirSync(join(root, "arms")).filter((f) => f.endsWith(".json")).sort()) {
@@ -78,7 +80,7 @@ export function loadSuite(dir: string): Suite {
 		.filter((d) => d.isDirectory() && existsSync(join(tasksDir, d.name, "task.json")))
 		.map((d) => loadTask(join(tasksDir, d.name)))
 		.sort((a, b) => a.id.localeCompare(b.id));
-	return { dir: root, model: meta.model, thinking: meta.thinking, forbidden: [...(meta.forbidden ?? []), join(root, "tasks")], extensions: (meta.extensions ?? []).map(abs), arms, tasks };
+	return { dir: root, model: meta.model, thinking: meta.thinking, forbidden: [...(meta.forbidden ?? []), join(root, "tasks")], ...(meta.followUp ? { followUp: meta.followUp } : {}), extensions: (meta.extensions ?? []).map(abs), arms, tasks };
 }
 
 export function loadTask(dir: string): Task {

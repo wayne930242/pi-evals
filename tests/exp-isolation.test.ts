@@ -99,3 +99,36 @@ test("trial: the hidden check reaches the work dir only after the agent ends; th
 	assert.ok(!existsSync(r.workDir), "work dir removed after grading");
 	assert.ok(existsSync(join(trialDir, "grade.json")));
 });
+
+// A stand-in for pi that, when resumed with --session, appends the follow-up turn to that session file.
+const FAKE_PI_RESUME = `#!/bin/sh
+dir=""; resume=""; last=""
+while [ $# -gt 0 ]; do
+  case "$1" in --session-dir) dir="$2"; shift ;; --session) resume="$2"; shift ;; esac
+  last="$1"; shift
+done
+if [ -n "$resume" ]; then
+  printf '%s\\n' '{"type":"message","message":{"role":"user","content":[{"type":"text","text":"FOLLOW"}]}}' >> "$resume"
+  printf '%s\\n' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"second turn: '"$last"'"}]}}' >> "$resume"
+  exit 0
+fi
+mkdir -p "$dir"
+printf '%s\\n' '{"type":"session","version":3,"id":"s1","cwd":"x"}' '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"first turn"}]}}' > "$dir/s.jsonl"
+`;
+
+test("trial: a suite follow-up resumes the same session once, in every arm", async () => {
+	const { repo, base } = sourceRepo();
+	const root = suite(base, repo);
+	writeFileSync(join(root, "suite.json"), JSON.stringify({ model: "m/x", thinking: "medium", followUp: "Finish anything left." }));
+	const s = loadSuite(root);
+	const fixture = buildFixture(s, s.tasks[0], mkdtempSync(join(tmpdir(), "exp-fx-")));
+	const bin = join(mkdtempSync(join(tmpdir(), "exp-bin-")), "pi");
+	writeFileSync(bin, FAKE_PI_RESUME);
+	chmodSync(bin, 0o755);
+	const runDir = mkdtempSync(join(tmpdir(), "exp-run-"));
+	const r = await runTrial({ suite: s, task: s.tasks[0], arm: "bare", n: 1, runDir, fixture, piBin: bin, authFile: undefined });
+	const session = readFileSync(r.session as string, "utf8");
+	assert.equal(session.match(/FOLLOW/g)?.length, 1);
+	assert.match(session, /second turn: Finish anything left\./);
+	assert.equal(r.efficiency.turns, 2);
+});

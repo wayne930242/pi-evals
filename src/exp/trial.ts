@@ -24,6 +24,8 @@ export interface TrialOutcomeRaw {
 	checkMs?: number;
 	/** The provider refused for quota or rate limit: the run should stop. */
 	quota: boolean;
+	/** The suite's follow-up turn ran. */
+	followedUp?: boolean;
 }
 
 export interface TrialRecord {
@@ -67,10 +69,10 @@ export const trialDirOf = (runDir: string, task: string, arm: string, n: number)
 
 const QUOTA = /usage limit|quota|rate.?limit|too many requests|\b429\b/i;
 
-/** Every spelling of a path an agent might type: absolute, `~/…`, `$HOME/…`. */
-function spellings(path: string): string[] {
+/** Every spelling of a path an agent might type: absolute, `~/…`, `$HOME/…` (absolute only when HOME is the trial's). */
+function spellings(path: string, ownHome: boolean): string[] {
 	const home = homedir();
-	if (!path.startsWith(`${home}/`)) return [path];
+	if (ownHome || !path.startsWith(`${home}/`)) return [path];
 	const rest = path.slice(home.length + 1);
 	return [path, `~/${rest}`, `$HOME/${rest}`, `\${HOME}/${rest}`];
 }
@@ -78,17 +80,19 @@ function spellings(path: string): string[] {
 export function forbiddenFor(suite: Suite, task: Task): string[] {
 	const paths = [...suite.forbidden, ...(task.leak_paths ?? []), join(homedir(), ".pi", "agent", "sessions"), join(stateDir(), "experiments")];
 	if (task.fixture.repo) paths.push(task.fixture.repo);
-	return [...new Set(paths.flatMap(spellings))];
+	return [...new Set(paths.flatMap((p) => spellings(p, task.home === "work")))];
 }
 
-export function piArgs(suite: Suite, task: Task, arm: string, sessionDir: string): string[] {
+/** The headless pi command line; `session` resumes that session file (the follow-up turn) instead of starting one. */
+export function piArgs(suite: Suite, task: Task, arm: string, sessionDir: string, followUp?: { session: string; prompt: string }): string[] {
 	const a = suite.arms.get(arm);
 	if (!a) throw new Error(`unknown arm ${arm}; arms: ${[...suite.arms.keys()].join(", ")}`);
 	const args = ["-p", "--mode", "json", "--model", suite.model, "--thinking", suite.thinking, "-ns", "-ne", "-nc", "-np", "--no-mcp", "--no-themes", "-na", "--offline", "--session-dir", sessionDir];
+	if (followUp) args.push("--session", followUp.session);
 	for (const e of [...suite.extensions, ...a.extensions]) args.push("-e", e);
 	for (const s of a.skills) args.push("--skill", s);
 	for (const p of a.appendSystemPrompt) args.push("--append-system-prompt", p);
-	args.push("--", task.prompt.trim());
+	args.push("--", followUp ? followUp.prompt : task.prompt.trim());
 	return args;
 }
 
@@ -107,11 +111,11 @@ function findSession(dir: string): string | undefined {
 	return undefined;
 }
 
-function runAgent(bin: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, trialDir: string, timeoutMs: number) {
+function runAgent(bin: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, trialDir: string, timeoutMs: number, suffix = "") {
 	return new Promise<{ exit: number | null; signal: string | null; timedOut: boolean }>((resolve, reject) => {
 		const child = spawn(bin, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
-		child.stdout.pipe(createWriteStream(join(trialDir, "events.jsonl")));
-		child.stderr.pipe(createWriteStream(join(trialDir, "stderr.txt")));
+		child.stdout.pipe(createWriteStream(join(trialDir, `events${suffix}.jsonl`)));
+		child.stderr.pipe(createWriteStream(join(trialDir, `stderr${suffix}.txt`)));
 		let timedOut = false;
 		const timer = setTimeout(() => {
 			timedOut = true;
@@ -203,14 +207,24 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRecord> {
 	const args = piArgs(suite, task, arm, sessionDir);
 	writeFileSync(join(trialDir, "command.json"), `${JSON.stringify({ bin: spec.piBin ?? "pi", args, cwd: workDir, home: task.home === "work" ? workDir : undefined }, null, 2)}\n`);
 	const startedAt = new Date();
-	const r = await runAgent(spec.piBin ?? "pi", args, workDir, env, trialDir, (task.timeout_min ?? 60) * 60_000);
+	const timeoutMs = (task.timeout_min ?? 60) * 60_000;
+	let r = await runAgent(spec.piBin ?? "pi", args, workDir, env, trialDir, timeoutMs);
+	// One identical follow-up turn in every arm, so a close-guard notice left at settle can be read and acted on.
+	const first = findSession(sessionDir);
+	let followedUp = false;
+	if (suite.followUp && first && r.exit === 0 && !r.timedOut) {
+		const more = piArgs(suite, task, arm, sessionDir, { session: first, prompt: suite.followUp });
+		r = await runAgent(spec.piBin ?? "pi", more, workDir, env, trialDir, Math.max(60_000, timeoutMs - (Date.now() - startedAt.getTime())), "-2");
+		followedUp = true;
+	}
 	const endedAt = new Date();
 	const dirty = git(workDir, "status", "--porcelain").length > 0 || git(workDir, "rev-parse", "HEAD") !== fixtureHead;
 	git(workDir, "add", "-A");
 	writeFileSync(join(trialDir, "diff.patch"), execFileSync("git", ["diff", "--cached", "--binary", fixtureHead], { cwd: workDir, maxBuffer: 1 << 28 }));
 	const tail = (file: string) => (existsSync(file) ? readFileSync(file, "utf8").slice(-20_000) : "");
-	const quota = r.exit !== 0 && QUOTA.test(tail(join(trialDir, "stderr.txt")) + tail(join(trialDir, "events.jsonl")));
-	const raw: TrialOutcomeRaw = { exit: r.exit, signal: r.signal, timedOut: r.timedOut, wallMs: endedAt.getTime() - startedAt.getTime(), startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), dirty, quota };
+	const suffix = followedUp ? "-2" : "";
+	const quota = r.exit !== 0 && QUOTA.test(tail(join(trialDir, `stderr${suffix}.txt`)) + tail(join(trialDir, `events${suffix}.jsonl`)));
+	const raw: TrialOutcomeRaw = { exit: r.exit, signal: r.signal, timedOut: r.timedOut, wallMs: endedAt.getTime() - startedAt.getTime(), startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), dirty, quota, followedUp };
 	if (task.kind !== "should_not") {
 		const c = runCheck(task, workDir, cleanEnv(task.home === "work" ? { HOME: workDir } : {}), trialDir);
 		raw.checkExit = c.exit;

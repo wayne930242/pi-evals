@@ -42,6 +42,9 @@ export function successfulEdits(entries: unknown[]): string[] {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Arguments that point at something the tool reads, writes or runs; file contents, edit text and todo prose only name paths.
+const TOUCHING = ["path", "paths", "file", "files", "cwd", "dir", "directory", "command"];
+
 /**
  * The first tool call whose arguments touch a forbidden path (the original repo, pi's session store, the suite):
  * the agent could have read the future or another trial. A forbidden path followed by a name character is another
@@ -50,7 +53,7 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export function findLeak(entries: unknown[], forbidden: string[]): string | undefined {
 	const patterns = forbidden.filter(Boolean).map((path) => new RegExp(`${escape(path.replace(/\/+$/, ""))}(?![\\w.-])`));
 	for (const part of toolCalls(entries)) {
-		const args = JSON.stringify(part.arguments ?? {});
+		const args = JSON.stringify(TOUCHING.map((key) => part.arguments?.[key]).filter((v) => v !== undefined));
 		const hit = patterns.find((re) => re.test(args));
 		if (hit) return `${part.name}: ${hit.source.replace(/\\/g, "").replace(/\(\?!.*$/, "")}`;
 	}

@@ -36,7 +36,9 @@ export function gate(task: Task, fixture: string, options: { runs?: number } = {
 		ok = false;
 		lines.push(`FAIL ${line}`);
 	};
-	if (promptCreditsAnchor(task.prompt)) fail("prompt names a check: the detectors would credit both arms with an anchor (anchor_in_brief)");
+	// Process metrics count only on tasks that ask for a change, so only their prompts must leave the anchor to the agent.
+	if (task.kind === "should_not") lines.push("n/a  prompt anchor (process is not scored on should_not tasks)");
+	else if (promptCreditsAnchor(task.prompt)) fail("prompt names a check: the detectors would credit both arms with an anchor (anchor_in_brief)");
 	else lines.push("ok   prompt hands no anchor to either arm");
 	if (task.kind === "should_not") {
 		const answer = readFileSync(join(task.dir, task.reference.answer as string), "utf8");
@@ -55,7 +57,7 @@ export function gate(task: Task, fixture: string, options: { runs?: number } = {
 		cloneTree(fixture, base);
 		const b = check(task, base);
 		if (b.exit === 0) fail(`base passes the check (${b.tail})`);
-		else lines.push(`ok   base fails the check (exit ${b.exit}, ${(b.ms / 1000).toFixed(1)} s)`);
+		else lines.push(`ok   base fails the check (exit ${b.exit}, ${(b.ms / 1000).toFixed(1)} s: ${b.tail})`);
 		const ref = join(box, "reference");
 		cloneTree(fixture, ref);
 		execFileSync("git", ["apply", "--whitespace=nowarn", join(task.dir, task.reference.patch as string)], { cwd: ref });
