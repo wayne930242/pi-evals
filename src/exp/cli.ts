@@ -11,7 +11,7 @@ import { loadSuite } from "./task.ts";
 import { gate } from "./validity.ts";
 
 export const EXP_USAGE = `  pi-evals exp check <suite> [--task id]... [--rebuild]
-  pi-evals exp run <suite> --arms a,b --k N [--tasks a,b] [--parallel N] [--run-id id] [--pi <bin>]
+  pi-evals exp run <suite> --arms a,b --k N [--tasks a,b] [--parallel N] [--run-id id] [--pi <bin>] [--rerun <reason>]
   pi-evals exp grade <run-id|dir>
   pi-evals exp show <run-id|dir> [--json]
   pi-evals exp label <run-id|dir> [--answer <file|->]   (page of flipped trials; --answer writes the labels)`;
@@ -58,6 +58,7 @@ export async function expMain(args: string[]): Promise<number> {
 			parallel: parallel === undefined ? undefined : Number(parallel),
 			runId: flag(rest, "--run-id"),
 			piBin: flag(rest, "--pi"),
+			rerun: flag(rest, "--rerun"),
 			onProgress: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
 		});
 		process.stdout.write(`${JSON.stringify({ result: { runDir: r.runDir, trials: r.records.length, stopped: r.stopped } })}\n`);

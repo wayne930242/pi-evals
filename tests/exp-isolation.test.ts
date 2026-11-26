@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { buildFixture } from "../src/exp/fixture.ts";
+import { readResults, readRun, runExperiment } from "../src/exp/run.ts";
 import { loadSuite } from "../src/exp/task.ts";
 import { runTrial } from "../src/exp/trial.ts";
 
@@ -131,4 +132,35 @@ test("trial: a suite follow-up resumes the same session once, in every arm", asy
 	assert.equal(session.match(/FOLLOW/g)?.length, 1);
 	assert.match(session, /second turn: Finish anything left\./);
 	assert.equal(r.efficiency.turns, 2);
+});
+
+test("run: a rerun of one task keeps the run's meta and tasks, supersedes the old trials and keeps them", async () => {
+	const { repo, base } = sourceRepo();
+	const root = suite(base, repo);
+	const second = join(root, "tasks", "t2");
+	cpSync(join(root, "tasks", "t1"), second, { recursive: true });
+	const t2 = JSON.parse(readFileSync(join(second, "task.json"), "utf8"));
+	writeFileSync(join(second, "task.json"), JSON.stringify({ ...t2, id: "t2" }));
+	const bin = join(mkdtempSync(join(tmpdir(), "exp-bin-")), "pi");
+	writeFileSync(bin, FAKE_PI);
+	chmodSync(bin, 0o755);
+	const state = mkdtempSync(join(tmpdir(), "exp-state-"));
+	const saved = process.env.PI_EVALS_STATE_DIR;
+	process.env.PI_EVALS_STATE_DIR = state;
+	try {
+		await runExperiment({ suiteDir: root, arms: ["bare"], k: 1, runId: "r1", piBin: bin });
+		const r = await runExperiment({ suiteDir: root, arms: ["bare"], k: 1, runId: "r1", piBin: bin, tasks: ["t2"], rerun: "prompt fixed" });
+		const runDir = join(state, "experiments", "r1");
+		const meta = readRun(runDir);
+		assert.deepEqual(meta.tasks, ["t1", "t2"]);
+		assert.equal(meta.reruns?.[0]?.reason, "prompt fixed");
+		assert.deepEqual(meta.reruns?.[0]?.tasks, ["t2"]);
+		assert.equal(r.records.length, 1);
+		assert.equal(readResults(runDir).length, 3, "the superseded record stays in results.jsonl");
+		assert.ok(readdirSync(join(runDir, "trials", "t2", "bare")).some((d) => d.startsWith("1.prev-")), "the superseded trial dir is kept");
+		await assert.rejects(runExperiment({ suiteDir: root, arms: ["bare"], k: 2, runId: "r1", piBin: bin, tasks: ["t2"], rerun: "x" }), /k 2/);
+	} finally {
+		if (saved === undefined) delete process.env.PI_EVALS_STATE_DIR;
+		else process.env.PI_EVALS_STATE_DIR = saved;
+	}
 });

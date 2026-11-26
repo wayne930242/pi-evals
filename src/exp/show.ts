@@ -26,6 +26,7 @@ export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], ag
 	const valid = records.filter((r) => r.valid).length;
 	out.push(`run ${meta.id} · ${meta.model} (${meta.thinking}) · pi ${meta.pi ?? "?"} · k=${meta.k} · ${meta.tasks.length} tasks · ${summary.arms.reduce((s, a) => s + a.trials, 0)} valid trials${meta.stopped ? ` · STOPPED: ${meta.stopped}` : ""}`);
 	out.push(`started ${meta.startedAt}${meta.endedAt ? ` · ended ${meta.endedAt}` : " · running"} · ${records.length - valid} invalid record(s)`);
+	for (const r of meta.reruns ?? []) out.push(`rerun ${r.at}: ${r.tasks.join(", ")} (${r.reason}); earlier trials superseded, kept in results.jsonl`);
 	out.push("");
 	const w = 28;
 	out.push(pad("metric", w) + arms.map((a) => pad(a, 12)).join("") + (summary.pair ? `${summary.pair[1]} − ${summary.pair[0]} (95% CI)` : ""));

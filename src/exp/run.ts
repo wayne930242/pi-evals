@@ -23,6 +23,8 @@ export interface RunOptions {
 	parallel?: number;
 	runId?: string;
 	piBin?: string;
+	/** Rerun the chosen tasks in an existing run, with this reason: their earlier trials are superseded, not deleted. */
+	rerun?: string;
 	onProgress?: (event: Record<string, unknown>) => void;
 }
 
@@ -43,6 +45,8 @@ export interface RunMeta {
 	startedAt: string;
 	endedAt?: string;
 	stopped?: string;
+	/** Tasks rerun in this run after a task fix; the superseded trials stay in results.jsonl and as `<n>.prev-*` dirs. */
+	reruns?: { tasks: string[]; reason: string; at: string; suiteSha?: string }[];
 }
 
 const safe = (f: () => string) => {
@@ -103,7 +107,15 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 		parallel,
 		startedAt: new Date().toISOString(),
 	};
-	writeFileSync(join(runDir, "run.json"), `${JSON.stringify(meta, null, 2)}\n`);
+	let record = meta;
+	if (options.rerun !== undefined) {
+		if (!existsSync(join(runDir, "run.json"))) throw new Error(`no run ${id} to rerun tasks in`);
+		const old = readRun(runDir);
+		const same = old.model === meta.model && old.thinking === meta.thinking && old.k === meta.k && Object.keys(old.arms).join() === Object.keys(meta.arms).join();
+		if (!same) throw new Error(`rerun must match run ${id}: model ${old.model}/${old.thinking}, arms ${Object.keys(old.arms).join(",")}, k ${old.k}; got k ${meta.k}`);
+		record = { ...old, tasks: [...new Set([...old.tasks, ...meta.tasks])], reruns: [...(old.reruns ?? []), { tasks: meta.tasks, reason: options.rerun, at: meta.startedAt, ...(meta.suiteSha ? { suiteSha: meta.suiteSha } : {}) }] };
+	}
+	writeFileSync(join(runDir, "run.json"), `${JSON.stringify(record, null, 2)}\n`);
 	const progress = options.onProgress ?? (() => {});
 	const fixtures = new Map<string, string>();
 	for (const task of tasks) {
@@ -112,7 +124,7 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 	}
 	const jobs: { task: Task; arm: string; n: number }[] = [];
 	for (const task of tasks) for (let n = 1; n <= options.k; n++) for (const arm of options.arms) jobs.push({ task, arm, n });
-	const done = new Set(readResults(runDir).filter((r) => r.valid).map((r) => `${r.task}\0${r.arm}\0${r.n}`));
+	const done = new Set(options.rerun === undefined ? readResults(runDir).filter((r) => r.valid).map((r) => `${r.task}\0${r.arm}\0${r.n}`) : []);
 	const queue = jobs.filter((j) => !done.has(`${j.task.id}\0${j.arm}\0${j.n}`));
 	const total = jobs.length;
 	let finished = jobs.length - queue.length;
@@ -139,10 +151,10 @@ export async function runExperiment(options: RunOptions): Promise<{ runDir: stri
 		while (queue.length && !stopped) await one(queue.shift()!);
 	});
 	await Promise.all(workers);
-	meta.endedAt = new Date().toISOString();
-	if (stopped) meta.stopped = stopped;
-	writeFileSync(join(runDir, "run.json"), `${JSON.stringify(meta, null, 2)}\n`);
-	writeSummary(runDir, meta);
+	if (options.rerun === undefined) record.endedAt = new Date().toISOString();
+	if (stopped) record.stopped = stopped;
+	writeFileSync(join(runDir, "run.json"), `${JSON.stringify(record, null, 2)}\n`);
+	writeSummary(runDir, record);
 	if (stopped) progress({ monitorOutcome: { status: "blocked", message: stopped } });
 	return { runDir, records, stopped };
 }
