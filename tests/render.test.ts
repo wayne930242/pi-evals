@@ -76,6 +76,7 @@ test("change strip marks each change, counts dense dates and links only the two 
 	const html = renderHtml(m, "en", 30), strip = html.match(/<section class="change-strip">(.*?)<\/section>/s)?.[1] ?? "";
 	assert.equal([...strip.matchAll(/class="change-mark /g)].length, 9);
 	assert.match(strip, /9 changes/); assert.match(strip, /Package version: 6/);
+	assert.match(renderHtml(m, "zh", 30), /<h2>近 30 天共 9 筆調整：版本 6、模型路由 0、規則 0、角色 0、skill 0、手動 3；其中 2 筆值得回看/);
 	assert.match(strip, /×9/);
 	const targets = [...strip.matchAll(/href="#(change-\d+)"/g)];
 	assert.equal(targets.length, 2);

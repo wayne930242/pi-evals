@@ -15,7 +15,9 @@ export function changeStrip(m: ReportModel, all: Change[], picks: Change[], ids:
 		const slot = Math.floor((x(c) - 16) / 30), cells = bins.get(slot) ?? [];
 		cells.push(c); bins.set(slot, cells); counts.set(c.kind, (counts.get(c.kind) ?? 0) + 1);
 	}
-	const total = L(`${period}: ${num(all.length)} changes; ${picks.length} worth a closer look.`, `${period}共 ${num(all.length)} 筆調整，其中 ${picks.length} 筆值得回看。`);
+	const short = { pin: "版本", "model-routing": "模型路由", rule: "規則", "agent-role": "角色", skill: "skill", manual: "手動" };
+	const breakdown = KINDS.map(k => `${L(label(k), short[k])} ${num(counts.get(k) ?? 0)}`).join(L(", ", "、"));
+	const total = L(`${period}: ${num(all.length)} changes: ${breakdown}; ${picks.length} worth a closer look.`, `${period}共 ${num(all.length)} 筆調整：${breakdown}；其中 ${picks.length} 筆值得回看。`);
 	const legend = KINDS.map(k => `<span><i class="key kind-${k}"></i>${esc(label(k))}: ${num(counts.get(k) ?? 0)}</span>`).join("");
 	const base = 64, marks: string[] = [], labeled = new Map<Change, { px: number; py: number; dot: string }>();
 	for (const [slot, cells] of bins) {
