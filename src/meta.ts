@@ -165,7 +165,7 @@ export const METRICS: Record<string, MetricMeta> = {
 		label: t("Your verdict matches the automatic check", "你的判斷與自動檢查一致"),
 		meaning: t("How far the automatic check can be trusted: it is the share of sessions you labelled where you and it gave the same verdict.", "自動檢查有多可信：在你標記過的工作階段中，你和它判斷相同的比例。"),
 		goodDirection: "higher",
-		howComputed: t("Sessions where your label equals the check's label, divided by sessions you labelled for that check.", "你的標記與檢查結果相同的工作階段數，除以你為該檢查標記的工作階段數。"),
+		howComputed: t("Sessions where your label equals the check's label, divided by sessions you labelled pass or fail for that check; labels marked unclear are counted apart.", "你的標記與檢查結果相同的工作階段數，除以你為該檢查標成通過或未通過的工作階段數；標成「看不出來」的另外計數。"),
 	},
 	coverage: {
 		label: t("Old sessions already indexed", "已建索引的舊工作階段"),

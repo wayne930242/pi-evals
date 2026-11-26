@@ -156,9 +156,9 @@ export function sections(m: ReportModel, lang: Lang, cards: ReturnType<typeof co
 		meta.agreement.meaning[lang],
 		m.labels.needsIndex ? `<p>${L("Run /evals extract to count labels in this period.", "請執行 /evals extract 以計算這段期間的標記。")}</p>` : m.labels.present && m.labels.n
 			? T(
-				[L("Check", "檢查"), L("Labelled", "已標記"), L("Agreement", "一致比例")],
-				m.labels.agreement.map((r) => [m.meta.detectors[r.detector]?.label[lang] ?? r.detector, r.n, pct(r.rate)]),
-			)
+				[L("Check", "檢查"), L("Labelled", "已標記"), L("Agreement", "一致比例"), L("Cannot tell", "看不出來")],
+				m.labels.agreement.map((r) => [m.meta.detectors[r.detector]?.label[lang] ?? r.detector, r.n, pct(r.rate), r.unclear]),
+			) + `<p class="muted">${L(`Cannot tell ${num(m.labels.unclear)}: labels marked unclear are left out of the agreement rate.`, `看不出來 ${num(m.labels.unclear)}：標成「看不出來」的不算進一致比例。`)}</p>`
 			: `<p>${
 				L(
 					"No labels yet. In phase 2 you will judge sessions yourself and compare your answers with the code checks.",

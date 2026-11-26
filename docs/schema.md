@@ -54,7 +54,7 @@ Sessions that started before 2026-11-23T10:51:07Z (the anchorloop 3.0.0 pin) get
 { "session_id": "01a2…", "evaluation_name": "anchor_before_first_edit", "label": "fail", "at": "2026-12-01T09:00:00Z", "note": "optional" }
 ```
 
-The report joins these with `index/session-evals.json` (the code labels per session) and shows how often they agree.
+`label` is `pass`, `fail`, or `unclear` (the reader could not tell). The report joins these with `index/session-evals.json` (the code labels per session) and shows how often they agree; `unclear` labels are left out of the agreement rate and counted on their own (「看不出來 N」).
 
 ## Change timeline
 

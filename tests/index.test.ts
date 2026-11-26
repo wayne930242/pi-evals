@@ -71,7 +71,20 @@ test("human labels join with code results per session and detector", () => {
 	writeFileSync(evals, JSON.stringify({ s1: { anchor_before_first_edit: "pass" }, s2: { anchor_before_first_edit: "fail" } }));
 	writeFileSync(labels, `${JSON.stringify({ session_id: "s1", evaluation_name: "anchor_before_first_edit", label: "pass" })}\n${JSON.stringify({ session_id: "s2", evaluation_name: "anchor_before_first_edit", label: "pass" })}\n`);
 	const m = model(index({ "2026-11-24": 1 }), [], labels, evals);
-	assert.deepEqual(m.labels.agreement, [{ detector: "anchor_before_first_edit", n: 2, agree: 1, rate: { value: 0.5, n: 2 } }]);
+	assert.deepEqual(m.labels.agreement, [{ detector: "anchor_before_first_edit", n: 2, agree: 1, rate: { value: 0.5, n: 2 }, unclear: 0 }]);
+});
+
+test("a human unclear label is left out of agreement and counted on its own", () => {
+	const dir = mkdtempSync(join(tmpdir(), "pi-evals-labels-"));
+	const labels = join(dir, "labels.jsonl");
+	const evals = join(dir, "session-evals.json");
+	writeFileSync(evals, JSON.stringify({ s1: { anchor_before_first_edit: "pass" }, s2: { anchor_before_first_edit: "fail" }, s3: { anchor_before_first_edit: "pass" } }));
+	const row = (s: string, label: string) => JSON.stringify({ session_id: s, evaluation_name: "anchor_before_first_edit", label });
+	writeFileSync(labels, [row("s1", "pass"), row("s2", "unclear"), row("s3", "unclear")].join("\n") + "\n");
+	const m = model(index({ "2026-11-24": 1 }), [], labels, evals);
+	assert.deepEqual(m.labels.agreement, [{ detector: "anchor_before_first_edit", n: 1, agree: 1, rate: { value: 1, n: 1 }, unclear: 2 }]);
+	assert.equal(m.labels.unclear, 2);
+	assert.equal(m.labels.n, 3);
 });
 
 test("live records fill a session no file covers, and lay monitor endings and answer sources over back-fill", () => {

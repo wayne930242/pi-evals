@@ -176,7 +176,7 @@ interface LabelRow {
 }
 
 function labelsJoin(labelsFile: string, evalsFile: string, sessionIds?: Set<string>) {
-	if (!existsSync(labelsFile)) return { present: false, n: 0, agreement: [] as { detector: string; n: number; agree: number; rate: Rate }[] };
+	if (!existsSync(labelsFile)) return { present: false, n: 0, unclear: 0, agreement: [] as { detector: string; n: number; agree: number; rate: Rate; unclear: number }[] };
 	const codeLabels = existsSync(evalsFile) ? (JSON.parse(readFileSync(evalsFile, "utf8")) as Record<string, Record<string, string>>) : {};
 	const rows: LabelRow[] = readFileSync(labelsFile, "utf8")
 		.split("\n")
@@ -188,19 +188,27 @@ function labelsJoin(labelsFile: string, evalsFile: string, sessionIds?: Set<stri
 				return [];
 			}
 		});
-	const by = new Map<string, { n: number; agree: number }>();
+	const by = new Map<string, { n: number; agree: number; unclear: number }>();
 	let n = 0;
+	let unclear = 0;
 	for (const row of rows) {
 		if (sessionIds && !sessionIds.has(traceId(row.session_id, "labels"))) continue;
 		n++;
+		const t = by.get(row.evaluation_name) ?? { n: 0, agree: 0, unclear: 0 };
+		// "Cannot tell" is the reader's honest answer, not a disagreement: count it apart from the agreement rate.
+		if (row.label === "unclear") {
+			unclear += 1;
+			t.unclear += 1;
+			by.set(row.evaluation_name, t);
+			continue;
+		}
 		const code = codeLabels[row.session_id]?.[row.evaluation_name];
 		if (!code || code === "na") continue;
-		const t = by.get(row.evaluation_name) ?? { n: 0, agree: 0 };
 		t.n += 1;
 		if (code === row.label) t.agree += 1;
 		by.set(row.evaluation_name, t);
 	}
-	return { present: true, n, agreement: [...by].map(([detector, t]) => ({ detector, n: t.n, agree: t.agree, rate: rate(t.agree, t.n) })) };
+	return { present: true, n, unclear, agreement: [...by].map(([detector, t]) => ({ detector, n: t.n, agree: t.agree, rate: rate(t.agree, t.n), unclear: t.unclear })) };
 }
 
 export function buildModel(options: {
