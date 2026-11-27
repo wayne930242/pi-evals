@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- A built fixture turns off git's background gc and maintenance (`gc.auto=0`, `maintenance.auto=false`). A first `exp check` on a large repo could fail copying the fixture while an auto gc pruned loose objects under `.git/objects`.
+
 ## 0.10.0
 
 - Per-trial artifacts: the check gets `EXP_ARTIFACT_DIR` (the trial's `artifacts/`). A task with `"screenshot": {"script", "timeout_s"}` runs that script from `check/` after the check; `artifacts/shot.png` and `screenshot: {ok, sha256, ms, exit}` are recorded in `grade.json`. The screenshot never changes the outcome.

@@ -64,6 +64,9 @@ test("fixture: one commit with no history, remote or future files", () => {
 	assert.equal(git(dir, "reflog").split("\n").length, 1);
 	assert.ok(existsSync(join(dir, "a.txt")));
 	assert.ok(!existsSync(join(dir, "answer.txt")));
+	// No background gc: a later copy of the fixture must not race an auto gc pruning loose objects.
+	assert.equal(git(dir, "config", "gc.auto"), "0");
+	assert.equal(git(dir, "config", "maintenance.auto"), "false");
 	// Rebuilding reuses the cached fixture.
 	assert.equal(buildFixture(s, s.tasks[0], join(dir, "..")), dir);
 });

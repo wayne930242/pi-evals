@@ -52,6 +52,9 @@ export function buildFixture(suite: Suite, task: Task, root: string, options: { 
 	git(tmp, "init", "-q", "-b", "main");
 	git(tmp, "config", "user.name", "agent");
 	git(tmp, "config", "user.email", "agent@example.invalid");
+	// A fixture is copied right after it is built; a background auto gc pruning loose objects would race that copy.
+	git(tmp, "config", "gc.auto", "0");
+	git(tmp, "config", "maintenance.auto", "false");
 	git(tmp, "add", "-A");
 	git(tmp, "commit", "-q", "--allow-empty", "-m", "fixture");
 	if (f.review) {
