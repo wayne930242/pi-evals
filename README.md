@@ -106,11 +106,12 @@ Monitoring watches real sessions, where task, model and your steering vary toget
 A suite is a directory you keep: `suite.json` (model, thinking, an optional follow-up message every trial gets, paths no trial may touch), `arms/<name>.json` (extensions, skills and system-prompt files an arm adds), and `tasks/<id>/` with `task.json`, `prompt.md`, an optional `setup.sh`, a hidden `check/check.sh`, and the reference solution (`reference.patch`, or `reference.md` and a fact list for a task that must change nothing).
 
 ```sh
-pi-evals exp check <suite> [--task id]...     # base fails the check, reference passes it 3 of 3
+pi-evals exp check <suite> [--task id]... [--ref-runs N]   # base fails the check, reference passes it N of N (default 3)
 pi-evals exp run <suite> --arms a,b --k 3 [--tasks a,b] [--parallel 3] [--run-id id]
 pi-evals exp grade <run-id>                    # regrade stored trials after a grader fix
 pi-evals exp show <run-id> [--json]            # per-arm rates, B − A with a 95% CI, per-task table
 pi-evals exp label <run-id> [--answer <file|->]
+pi-evals exp label <run-id> --ui [--answer <file|->]   # blind screenshot review
 ```
 
 Each task's starting tree is built once as a single fresh commit (no history, remote or later commits) and cloned per trial into a temporary directory. pi runs headless with its own agent dir and session dir. The hidden check is copied in only after the agent ends. Outcome comes from `check.sh`, or for a must-not-change task from a clean tree plus the fact list. Process comes from the same detectors the report uses. A tool call that touches the original repository, pi's sessions or the suite's tasks makes the trial invalid; it is rerun once. The run stops at the first quota refusal. Trials are interleaved per task (A1 B1 A2 B2 …), so a stopped run stays paired.
@@ -118,6 +119,14 @@ Each task's starting tree is built once as a single fresh commit (no history, re
 `exp show` gives pass@1, pass^k (all of k trials pass), the process rates, cost and minutes per trial, and B − A with a paired cluster-bootstrap 95% CI over tasks. `exp label` writes a form page listing the trials where the arms disagree, without saying which arm ran them; `--answer` stores your verdicts in `labels.jsonl` with `source: "experiment"`. `exp show` compares them with the graders, and the monitoring report leaves them out.
 
 Runs are kept in `~/.local/state/pi-evals/experiments/<run-id>/` and built fixtures in `~/.local/state/pi-evals/fixtures/`.
+
+#### Screenshots and the blind UI review
+
+The check and the screenshot step get `EXP_ARTIFACT_DIR`, the trial's `artifacts/` directory. A task whose `task.json` has `"screenshot": {"script": "screenshot.sh", "timeout_s": 900}` runs `check/screenshot.sh` after its check, in the same work dir; the script writes `$EXP_ARTIFACT_DIR/shot.png`. The trial records `screenshot: {ok, sha256, ms, exit}` in `grade.json`. The screenshot never changes the outcome: a build failure or a missing PNG is `ok: false`.
+
+For such a task, `exp check` also shoots the base and the reference twice each. The two reference shots must have the same sha256; a task that ships `check/compare.sh A B`, printing the number of differing pixels, may let them differ by up to 0.1% of the pixels. The reference must differ from the base: by at least 0.5% of the pixels with `compare.sh`, by sha256 without it. The shots are kept in `~/.local/state/pi-evals/fixtures/gate-shots/<task>/{base,reference}.png`. `--ref-runs N` sets how many times the reference check runs, for slow verifiers.
+
+`exp label <run> --ui` writes `<run>/ui-review/index.md`: for each screenshot task, the first 25 lines of the issue, its pictures from the fixture's `.issue/`, the gate's base shot ("改之前") and reference shot ("參考答案"), then one `review` block in which you tick the shots that look right. Shots are copied under random names in a seeded order, so no file name, alt text or position says which arm made them; the mapping is in `ui-review/ui-review.json`. Open the page with pi-better-show and send it; `exp label <run> --ui --answer <file|->` stores the answer as `ui_outcome` rows in `labels.jsonl`: ticked is pass, not ticked is fail, and a comment starting with `?` or containing 看不出 is unclear. `exp show` then adds screenshots produced per arm, the share you judged right per arm with B − A and its CI, and how often your verdict agrees with the verifier.
 
 #### Dispatching mains
 

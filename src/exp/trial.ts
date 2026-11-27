@@ -14,6 +14,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stateDir } from "../paths.ts";
+import { runScreenshot, type ScreenshotRaw } from "./artifacts.ts";
 import { cloneTree, git } from "./fixture.ts";
 import { type Efficiency, efficiency, findLeak, gradeTranscript, readSession, shouldNotOutcome } from "./grade.ts";
 import { closeWorkspace, createWorkspace, type HerdrLab, herdrEnv, sweepProcesses, trialProcesses } from "./herdr-lab.ts";
@@ -36,6 +37,8 @@ export interface TrialOutcomeRaw {
 	followedUp?: boolean;
 	/** Dispatch trials only: what the RPC driver and the cleanup saw. */
 	dispatch?: DispatchRaw;
+	/** Tasks with `screenshot`: the step's exit and its PNG; never part of the outcome. */
+	screenshot?: ScreenshotRaw;
 }
 
 export interface DispatchRaw {
@@ -113,6 +116,8 @@ export interface TrialRecord {
 	children?: ChildRecord[];
 	dispatch?: DispatchRecord;
 	armStamp?: ArmStamp;
+	/** Tasks with `screenshot`: whether a PNG was produced (`artifacts/shot.png` in the trial dir). */
+	screenshot?: { ok: boolean; sha256?: string; ms: number; exit: number | null };
 	session?: string;
 	workDir: string;
 }
@@ -382,8 +387,10 @@ function runAgent(bin: string, args: string[], cwd: string, env: NodeJS.ProcessE
 
 function runCheck(task: Task, workDir: string, env: NodeJS.ProcessEnv, trialDir: string): { exit: number | null; ms: number } {
 	cpSync(join(task.dir, "check"), join(workDir, ".exp-check"), { recursive: true });
+	const artifacts = join(trialDir, "artifacts");
+	mkdirSync(artifacts, { recursive: true });
 	const started = Date.now();
-	const r = spawnSync("bash", [join(".exp-check", "check.sh")], { cwd: workDir, env: { ...env, EXP_CHECK_DIR: join(workDir, ".exp-check") }, encoding: "utf8", timeout: (task.check_timeout_s ?? 300) * 1000, maxBuffer: 1 << 26 });
+	const r = spawnSync("bash", [join(".exp-check", "check.sh")], { cwd: workDir, env: { ...env, EXP_CHECK_DIR: join(workDir, ".exp-check"), EXP_ARTIFACT_DIR: artifacts }, encoding: "utf8", timeout: (task.check_timeout_s ?? 300) * 1000, maxBuffer: 1 << 26 });
 	writeFileSync(join(trialDir, "check.log"), `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? `\n${r.error.message}\n` : ""}\nexit ${r.status}\n`);
 	return { exit: r.status, ms: Date.now() - started };
 }
@@ -464,6 +471,7 @@ export function gradeTrial(spec: { suite: Suite; task: Task; arm: string; n: num
 		quota,
 		efficiency: eff,
 		...dispatch,
+		...(raw.screenshot ? { screenshot: { ok: Boolean(raw.screenshot.sha256), ...(raw.screenshot.sha256 ? { sha256: raw.screenshot.sha256 } : {}), ms: raw.screenshot.ms, exit: raw.screenshot.exit } } : {}),
 		...(session ? { session } : {}),
 		workDir: spec.workDir ?? "",
 	};
@@ -539,9 +547,11 @@ export async function runTrial(spec: TrialSpec): Promise<TrialRecord> {
 		: r.exit !== 0 && QUOTA.test(tail(join(trialDir, `stderr${suffix}.txt`)) + tail(join(trialDir, `events${suffix}.jsonl`)));
 	const raw: TrialOutcomeRaw = { exit: r.exit, signal: r.signal, timedOut: r.timedOut, wallMs: endedAt.getTime() - startedAt.getTime(), startedAt: startedAt.toISOString(), endedAt: endedAt.toISOString(), dirty, quota, followedUp, ...(dispatchRaw ? { dispatch: dispatchRaw } : {}) };
 	if (task.kind !== "should_not") {
-		const c = runCheck(task, workDir, cleanEnv(task.home === "work" ? { HOME: workDir } : {}), trialDir);
+		const env = cleanEnv(task.home === "work" ? { HOME: workDir } : {});
+		const c = runCheck(task, workDir, env, trialDir);
 		raw.checkExit = c.exit;
 		raw.checkMs = c.ms;
+		if (task.screenshot) raw.screenshot = runScreenshot(task, workDir, env, join(trialDir, "artifacts"), join(trialDir, "screenshot.log"));
 	}
 	writeFileSync(join(trialDir, "outcome.json"), `${JSON.stringify(raw, null, 2)}\n`);
 	writeFileSync(join(trialDir, "timing.json"), `${JSON.stringify({ startedAt: raw.startedAt, endedAt: raw.endedAt, wallMs: raw.wallMs, checkMs: raw.checkMs }, null, 2)}\n`);

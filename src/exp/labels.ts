@@ -22,7 +22,9 @@ export interface QueueItem {
 }
 
 export const OUTCOME = "outcome";
-const RULES = ["anchor_before_first_edit", "check_after_last_edit", OUTCOME] as const;
+/** The boss's verdict on a trial's screenshot (`exp label --ui`), compared with the verifier's outcome. */
+export const UI_OUTCOME = "ui_outcome";
+const RULES = ["anchor_before_first_edit", "check_after_last_edit", OUTCOME, UI_OUTCOME] as const;
 const VERDICTS = new Set<Verdict>(["pass", "fail", "unclear"]);
 const CHOICES = [
 	{ value: "pass", label: "照做／做對" },
@@ -30,13 +32,13 @@ const CHOICES = [
 	{ value: "unclear", label: "看不出來" },
 ];
 
-function sessionIdOf(file: string): string {
+export function sessionIdOf(file: string): string {
 	const first = readFileSync(file, "utf8").split("\n", 1)[0];
 	const id = (JSON.parse(first) as { id?: unknown }).id;
 	return typeof id === "string" ? id : file;
 }
 
-function shuffle<T>(xs: T[], seed: number): T[] {
+export function shuffle<T>(xs: T[], seed: number): T[] {
 	let a = seed >>> 0;
 	const random = () => {
 		a = (Math.imul(a ^ (a >>> 15), 1 | a) + 0x6d2b79f5) >>> 0;
@@ -139,7 +141,7 @@ export function applyLabelAnswer(runDir: string, meta: RunMeta, answer: string, 
 	for (const [name, raw] of fields) {
 		const m = /^(q\d+)_(.+)$/.exec(name);
 		const item = m && byQ.get(m[1]);
-		if (!m || !item || !(RULES as readonly string[]).includes(m[2])) continue;
+		if (!m || !item || !(RULES as readonly string[]).includes(m[2]) || m[2] === UI_OUTCOME) continue;
 		const label = raw.trim() as Verdict;
 		if (!VERDICTS.has(label)) continue;
 		const note = fields.get(`${m[1]}_note`)?.trim();
@@ -167,7 +169,7 @@ export function labelAgreement(meta: RunMeta, records: TrialRecord[], labelsFile
 				unclear++;
 				continue;
 			}
-			const code = rule === OUTCOME ? (r.outcome ? "pass" : "fail") : r.process[rule]?.label;
+			const code = rule === OUTCOME || rule === UI_OUTCOME ? (r.outcome ? "pass" : "fail") : r.process[rule]?.label;
 			if (code !== "pass" && code !== "fail") continue;
 			n++;
 			if (code === row.label) agree++;

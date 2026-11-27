@@ -2,6 +2,7 @@
 import type { RunMeta } from "./run.ts";
 import type { Metric, Summary } from "./summary.ts";
 import type { TrialRecord } from "./trial.ts";
+import type { UiSummary } from "./ui-review.ts";
 
 const NAMES: Record<Metric, string> = {
 	outcome: "outcome pass@1",
@@ -19,7 +20,7 @@ const pct = (v: number | undefined) => (v === undefined || Number.isNaN(v) ? "�
 const pp = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}`;
 const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - s.length));
 
-export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], agreement: { rule: string; n: number; agree: number; unclear: number; disagree: string[] }[] = []): string {
+export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], agreement: { rule: string; n: number; agree: number; unclear: number; disagree: string[] }[] = [], ui?: UiSummary): string {
 	const arms = summary.arms.map((a) => a.arm);
 	const guarded = (arm: string) => [...(meta.arms[arm]?.extensions ?? [])].some((e) => /close-guard/.test(e));
 	const out: string[] = [];
@@ -41,6 +42,16 @@ export function show(meta: RunMeta, summary: Summary, records: TrialRecord[], ag
 	out.push(pad(meta.dispatch ? "agent-minutes per trial" : "minutes per trial", w) + summary.arms.map((a) => pad(a.minutesPerTrial.toFixed(1), 12)).join(""));
 	out.push(pad("total cost", w) + summary.arms.map((a) => pad(`$${a.costTotal.toFixed(2)}`, 12)).join(""));
 	out.push(pad("invalid trials", w) + summary.arms.map((a) => pad(String(a.invalid), 12)).join(""));
+	if (ui) {
+		const cell = (arm: string, f: (u: UiSummary["arms"][number]) => string) => {
+			const u = ui.arms.find((x) => x.arm === arm);
+			return pad(u ? f(u) : "—", 12);
+		};
+		const d = ui.delta;
+		out.push(pad("screenshots ok", w) + arms.map((a) => cell(a, (u) => `${u.shotsOk}/${u.shots}`)).join(""));
+		out.push(pad("ui correct (boss)", w) + arms.map((a) => cell(a, (u) => (u.labelled ? `${pct(u.correct)} n${u.labelled}` : "—"))).join("") + (d ? `${pp(d.delta)} pp (${pp(d.lo)} to ${pp(d.hi)})${d.lo <= 0 && d.hi >= 0 ? " no clear difference" : ""} · ${d.tasks} tasks` : ""));
+		if (ui.agree || ui.disagree.length || ui.unclear) out.push(`verifier vs boss: ${ui.agree} agree / ${ui.disagree.length} disagree${ui.unclear ? `, ${ui.unclear} unclear` : ""}${ui.disagree.length ? ` (${ui.disagree.join(", ")})` : ""}`);
+	}
 	out.push("");
 	out.push(pad("task", 24) + pad("kind", 12) + arms.map((a) => pad(`${a} pass`, 16)).join("") + "Δ pass@1");
 	for (const row of summary.tasks) {

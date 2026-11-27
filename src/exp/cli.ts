@@ -3,19 +3,22 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { layout } from "../paths.ts";
+import { gateShotsDir } from "./artifacts.ts";
 import { buildFixture } from "./fixture.ts";
 import { applyLabelAnswer, labelAgreement, writeLabelQueue } from "./labels.ts";
 import { experimentsDir, fixturesDir, readResults, readRun, regradeRun, runExperiment, selectTasks, writeSummary } from "./run.ts";
 import { show } from "./show.ts";
 import { latestRecords } from "./summary.ts";
 import { loadSuite } from "./task.ts";
+import { applyUiAnswer, uiSummary, writeUiReview } from "./ui-review.ts";
 import { gate } from "./validity.ts";
 
-export const EXP_USAGE = `  pi-evals exp check <suite> [--task id]... [--rebuild]
+export const EXP_USAGE = `  pi-evals exp check <suite> [--task id]... [--rebuild] [--ref-runs N]
   pi-evals exp run <suite> --arms a,b --k N [--tasks a,b] [--parallel N] [--run-id id] [--pi <bin>] [--herdr <bin>] [--rerun <reason>]
   pi-evals exp grade <run-id|dir>
   pi-evals exp show <run-id|dir> [--json]
-  pi-evals exp label <run-id|dir> [--answer <file|->]   (page of flipped trials; --answer writes the labels)`;
+  pi-evals exp label <run-id|dir> [--answer <file|->]   (page of flipped trials; --answer writes the labels)
+  pi-evals exp label <run-id|dir> --ui [--answer <file|->]   (blind screenshot review page; --answer writes ui_outcome labels)`;
 
 function flag(args: string[], name: string): string | undefined {
 	const i = args.indexOf(name);
@@ -35,6 +38,8 @@ export async function expMain(args: string[]): Promise<number> {
 	if (sub === "check" && target) {
 		const suite = loadSuite(target);
 		const tasks = selectTasks(suite, flags(rest, "--task"));
+		const refRuns = Number(flag(rest, "--ref-runs") ?? 3);
+		if (!Number.isInteger(refRuns) || refRuns < 1) throw new Error("--ref-runs must be a positive integer");
 		let failed = 0;
 		let preflight = true;
 		if (suite.dispatch) {
@@ -52,7 +57,7 @@ export async function expMain(args: string[]): Promise<number> {
 		for (const task of tasks) {
 			process.stdout.write(`${task.id} (${task.kind})\n`);
 			const fixture = buildFixture(suite, task, fixturesDir(), { rebuild: rest.includes("--rebuild"), log: (line) => process.stderr.write(`  ${line}\n`) });
-			const r = gate(task, fixture);
+			const r = gate(task, fixture, { runs: refRuns, shotsDir: gateShotsDir(fixturesDir(), task.id) });
 			for (const line of r.lines) process.stdout.write(`  ${line}\n`);
 			if (!r.ok) failed++;
 		}
@@ -91,13 +96,24 @@ export async function expMain(args: string[]): Promise<number> {
 		const summary = writeSummary(dir, meta);
 		const records = latestRecords(readResults(dir));
 		const agreement = labelAgreement(meta, records, layout().labels);
-		process.stdout.write(rest.includes("--json") ? `${JSON.stringify({ ...summary, agreement }, null, 2)}\n` : `${show(meta, summary, records, agreement)}\n`);
+		const ui = uiSummary(meta, records, layout().labels);
+		process.stdout.write(rest.includes("--json") ? `${JSON.stringify({ ...summary, agreement, ...(ui ? { ui } : {}) }, null, 2)}\n` : `${show(meta, summary, records, agreement, ui)}\n`);
 		return 0;
 	}
 	if (sub === "label" && target) {
 		const dir = runDirOf(target);
 		const meta = readRun(dir);
 		const answer = flag(rest, "--answer");
+		if (rest.includes("--ui")) {
+			if (answer) {
+				const rows = applyUiAnswer(dir, meta, readFileSync(answer === "-" ? 0 : answer, "utf8"), layout().labels);
+				process.stdout.write(`wrote ${rows.length} ui_outcome label(s) to ${layout().labels}\n`);
+				return rows.length ? 0 : 1;
+			}
+			const r = writeUiReview(dir, meta, readResults(dir), { suite: loadSuite(meta.suite), fixturesRoot: fixturesDir() });
+			process.stdout.write(`${r.items.length} screenshot(s) to review: ${r.page}\n`);
+			return r.items.length ? 0 : 1;
+		}
 		if (answer) {
 			const rows = applyLabelAnswer(dir, meta, readFileSync(answer === "-" ? 0 : answer, "utf8"), layout().labels);
 			process.stdout.write(`wrote ${rows.length} experiment label(s) to ${layout().labels}\n`);

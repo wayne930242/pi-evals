@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- Per-trial artifacts: the check gets `EXP_ARTIFACT_DIR` (the trial's `artifacts/`). A task with `"screenshot": {"script", "timeout_s"}` runs that script from `check/` after the check; `artifacts/shot.png` and `screenshot: {ok, sha256, ms, exit}` are recorded in `grade.json`. The screenshot never changes the outcome.
+- `exp check` gates screenshot tasks: the base and reference are shot twice each, the reference must be stable (same sha256, or ≤ 0.1% of pixels by the task's `compare.sh`) and differ from the base (≥ 0.5% of pixels, or by sha256). The shots are kept under `fixtures/gate-shots/<task>/`. `--ref-runs N` sets how many reference check runs the gate makes (default 3).
+- `exp label <run> --ui` writes a blind review page of every trial's screenshot next to the issue, the base and the reference, under random file names in a seeded order; `--ui --answer` stores the picks as `ui_outcome` labels. `exp show` reports screenshots produced and the share judged right per arm, B − A with its CI, and agreement with the verifier.
+
 ## 0.9.0
 
 - `pi-evals exp` can test a main agent that dispatches work. A suite with a `dispatch` block in `suite.json` (a vendored pi-herdr-agents checkout, `maxConcurrent`, `maxLaunches`) runs each trial's main as `pi --mode rpc`, with pi-herdr-agents' `subagent` and the suite's model as its only model. The runner waits while children are out, then sends the follow-up once. Children run in a Herdr server private to the run, one workspace per trial, and load the same arm as the main from the trial's agent dir (`settings.json`, `APPEND_SYSTEM.md`, `herdr-agents/config.json`). Suites without `dispatch` run as before.

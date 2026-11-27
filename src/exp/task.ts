@@ -31,6 +31,8 @@ export interface Task {
 	leak_paths?: string[];
 	timeout_min?: number;
 	check_timeout_s?: number;
+	/** A script in check/ run after the check that writes `$EXP_ARTIFACT_DIR/shot.png`; it never changes the outcome. */
+	screenshot?: { script: string; timeout_s?: number };
 	prompt: string;
 }
 
@@ -125,6 +127,10 @@ export function loadTask(dir: string): Task {
 	} else {
 		if (!raw.reference?.patch) throw new Error(`${where}: reference.patch is required`);
 		if (!existsSync(join(dir, "check", "check.sh"))) throw new Error(`${dir}: check/check.sh is required`);
+	}
+	if (raw.screenshot) {
+		if (raw.kind === "should_not") throw new Error(`${where}: a should_not task cannot take a screenshot`);
+		if (!raw.screenshot.script || !existsSync(join(dir, "check", raw.screenshot.script))) throw new Error(`${where}: screenshot.script must name a file in check/`);
 	}
 	return { ...raw, dir, prompt: readFileSync(join(dir, "prompt.md"), "utf8") };
 }

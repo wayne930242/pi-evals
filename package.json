@@ -1,6 +1,6 @@
 {
   "name": "pi-evals",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Usage and process records for pi: how skills, packages, ask-user, monitors and subagents are used, back-filled from past sessions, with a static report and an evals_query tool",
   "type": "module",
   "license": "MIT",
