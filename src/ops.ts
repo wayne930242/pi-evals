@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildIndex, loadIndex, loadRows } from "./build.ts";
+import { alertsText, loadAlerts, type AlertState, uiLocale } from "./alerts.ts";
 import { addMark, readChanges } from "./changes.ts";
 import { coverage } from "./coverage.ts";
 import { extract, loadCheckpoint, type Progress } from "./extract/run.ts";
@@ -117,6 +118,16 @@ export function reportPath(env?: Env): string {
 
 export function mark(text: string, env?: Env) {
 	return addMark(context(env).layout.marks, text);
+}
+
+/** The change alerts off the extracted store (no extract, no model call). */
+export function changeAlerts(env?: Env, now = Date.now(), options: { skipStale?: boolean } = {}): Promise<AlertState> {
+	const { layout: l, settings } = context(env);
+	return loadAlerts({ status: l.status, sessionRows: l.sessionRows, changes: l.changes, alerts: l.alerts }, settings, now, options);
+}
+
+export async function alertsReport(env: Env = process.env, now = Date.now()): Promise<string> {
+	return alertsText(await changeAlerts(env, now), uiLocale(env, context(env).settings.locale));
 }
 
 const gb = (b: number) => `${(b / 1e9).toFixed(2)} GB`;

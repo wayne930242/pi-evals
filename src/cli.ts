@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /** Thin CLI over the same operations as `/evals`. */
-import { context, mark, runExtract, runReport, statusText } from "./ops.ts";
+import { alertsReport, changeAlerts, context, mark, runExtract, runReport, statusText } from "./ops.ts";
 import { query, type View, VIEWS } from "./query.ts";
 
 const USAGE = `usage:
   pi-evals extract [--root <dir>]... [--workers <n>] [--json]
   pi-evals report [--out <dir>] [--since YYYY-MM-DD | --days N] [--project <key>] [--lang zh|en]
   pi-evals status
+  pi-evals alerts [--json]
   pi-evals query <${VIEWS.join("|")}> [--since YYYY-MM-DD] [--project <key>]
   pi-evals mark <note>
   pi-evals exp check|run|grade|show …   (pi-evals exp help)`;
@@ -63,6 +64,10 @@ async function main(argv: string[]): Promise<number> {
 	}
 	if (cmd === "status") {
 		console.log(statusText());
+		return 0;
+	}
+	if (cmd === "alerts") {
+		console.log(args.includes("--json") ? JSON.stringify(await changeAlerts(), null, 1) : await alertsReport());
 		return 0;
 	}
 	if (cmd === "query") {

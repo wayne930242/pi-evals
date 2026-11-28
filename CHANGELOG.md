@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+- Change alerts. After a setup change (a pin, a rules, skill, role or model-routing commit, or a mark), pi-evals compares each process check's pass rate in the sessions before and after it (`impactWindowDays` a side, as the changes view splits them). A check counts as dropped when both sides hold at least `alertMinSessions` (default 20) sessions it applies to, the after rate is 10+ percentage points lower, and a one-sided pooled two-proportion z-test gives z >= 3. Changes in one commit are one change point; nearby points for the same check fold into the strongest, so one drop warns once.
+- A main session's start shows one line for the newest pending drop, in English or zh-TW (`locale` setting, else `LC_ALL`/`LC_MESSAGES`/`LANG`), and records it in `alerts.jsonl` so it is not shown again. Subagent sessions, stale data (last extract over 24 hours old), and `changeAlerts: false` show nothing. It reads the extracted index after the start returns; no model call, no extract.
+- `/evals alerts` and `pi-evals alerts [--json]` list the rule, pending and shown alerts, and drops still short of sessions after the change.
+
 ## 0.10.1
 
 - A built fixture turns off git's background gc and maintenance (`gc.auto=0`, `maintenance.auto=false`). A first `exp check` on a large repo could fail copying the fixture while an auto gc pruned loose objects under `.git/objects`.

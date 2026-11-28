@@ -45,6 +45,7 @@ The observer loads in every session, subagents included.
 | `/evals` or `/evals status` | Record counts, the last extract, index coverage of old sessions, and the report path. |
 | `/evals extract [--workers N]` | Back-fills changed sessions in a background process, with two workers by default to leave memory for pi. Progress shows in the footer. |
 | `/evals findings [--since YYYY-MM-DD] [--project <key>]` | Shows the report’s headline, what limits it, and where to look next. |
+| `/evals alerts` | Lists the change alerts: the drop rule, alerts pending and already shown, and drops still short of sessions after the change ([Change alerts](#change-alerts)). |
 | `/evals report [--since YYYY-MM-DD \| --days N] [--project <key>]` | Builds the linked date ranges, or one custom report when a start date or day count is given. |
 | `/evals mark <note>` | Adds a note to the change timeline, e.g. `/evals mark workers moved to gpt-6.2-astra`. |
 | `/evals label` | Labels the current session while the work is in front of you: pick a rule (or 「其他」), then 照做, 沒照做 or 看不出來, then an optional note in your own words. |
@@ -95,9 +96,29 @@ On either surface, `--workers 0` reads the files sequentially without worker thr
 pi-evals extract [--root <dir>]... [--workers <n>] [--json]
 pi-evals report [--out <dir>] [--since YYYY-MM-DD | --days N] [--project <key>] [--lang zh|en]
 pi-evals status
+pi-evals alerts [--json]
 pi-evals query <view> [--since YYYY-MM-DD] [--project <key>]
 pi-evals mark <note>
 ```
+
+### Change alerts
+
+After a setup change (a pin such as anchorloop or sb, a rules, skill, role or model-routing commit, or a `/evals mark`), pi-evals compares each process check’s pass rate in the sessions that started in the `impactWindowDays` before the change with those in the same span after it, the same split as the changes view.
+When a check clearly dropped, the next main session’s start shows one line, for example:
+
+```text
+pi-evals: 23 sessions after anchorloop 3.4.0, “Ran the check after the last edit” fell from 61% to 9% (41 before). /evals alerts for details
+```
+
+The drop rule: both sides hold at least `alertMinSessions` (default 20) sessions the check applies to, the after rate is at least 10 percentage points lower, and a one-sided pooled two-proportion z-test gives z ≥ 3 (p ≈ 0.0013).
+The bar is above the usual 1.96 because every change point and check is tested.
+Changes at the same instant (one commit) are one change point, named by its anchorloop or sb pin first; points closer than one window for the same check fold into the one with the largest z, or into one already shown, so one drop warns once.
+Only changes from the last 14 days before the last extract are scanned.
+
+Each change point and check warns at most once; a shown alert is recorded in `alerts.jsonl`, and later sessions show the next pending one.
+Nothing is shown when nothing dropped, in subagent sessions, or when the last extract is more than 24 hours old (`/evals alerts` still says what the old data shows).
+The check reads `index/sessions.json` and `changes.jsonl` after the session start returns; it makes no model call and runs no extract.
+The line is in English or Traditional Chinese by the `locale` setting, else by the environment (`LC_ALL`, `LC_MESSAGES`, `LANG`), since pi has no language setting of its own.
 
 ### Experiments: `pi-evals exp`
 
@@ -196,7 +217,10 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
   "extraRoots": ["/path/to/session-trash"],
   "changeRepos": ["~/projects/weihung-basic-agent", "~/projects/weihung-agent-root"],
   "coverageDays": 60,
-  "impactWindowDays": 7
+  "impactWindowDays": 7,
+  "alertMinSessions": 20,
+  "changeAlerts": true,
+  "locale": "zh-TW"
 }
 ```
 
@@ -204,6 +228,9 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
 - `changeRepos`: repositories whose `git log` feeds the change timeline. A leading `~` means your home directory.
 - `coverageDays`: the age, in days without changes, at which a session file counts as old in the coverage figure.
 - `impactWindowDays`: days on each side of a change in the before-and-after comparison.
+- `alertMinSessions`: sessions a check applies to, on each side of a change, before a change alert can fire.
+- `changeAlerts`: `false` turns off the session-start line; `/evals alerts` still lists what it would say.
+- `locale`: `zh-TW` or `en` for the session-start line and `/evals alerts`; unset, the environment's language.
 
 `PI_EVALS_STATE_DIR` moves the state dir; `PI_CODING_AGENT_DIR` points at another pi agent dir.
 
@@ -220,6 +247,7 @@ Use the section links for usage, process checks, cost and cleanup coverage, or r
 | `index/items.json`, `index/workitems.jsonl` | Work items joined across sessions, and their `pi.workitem` and `pi.stall` records. |
 | `index/lines.json` | Cached `git diff --numstat` line counts between evidence commits. |
 | `changes.jsonl`, `marks.jsonl` | The change timeline and your notes. |
+| `alerts.jsonl` | Change alerts already shown at a session start, one per change point and check. |
 | `labels.jsonl` | Your labels and agents' corrections, appended one per line ([docs/schema.md](docs/schema.md#labels)). The report shows how often you and the automatic checks agree, split by labels given after the fact and in the moment; `unclear` labels are counted apart. Its 「被糾正」 section counts the corrections by rule, failure type, skill loaded and anchorloop version. |
 | `asks.jsonl` | One row per `/ask-ai`: session, time, project and todo item, without the question ([docs/schema.md](docs/schema.md#asks)). |
 | `reports/report.html`, `reports/model.json` | The report. |

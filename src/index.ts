@@ -1,16 +1,18 @@
 /**
- * pi-evals: the live observer, the `/evals` command (status, extract, report, mark, label, run), `/ask-ai`, and the `evals_query` and `evals_label` tools.
+ * pi-evals: the live observer, the `/evals` command (status, findings, alerts, extract, report, mark, label, run), the change alert at a main session start, `/ask-ai`, and the `evals_query` and `evals_label` tools.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { alertLine, recordShown, uiLocale } from "./alerts.ts";
 import { askAi } from "./ask-ai.ts";
+import { logicalIdOf } from "./extract/session.ts";
 import { scriptsDir } from "./findings.ts";
 import { liveLabels } from "./live-labels.ts";
 import { observe } from "./observer.ts";
-import { context, mark, reportPath, runReport, statusText } from "./ops.ts";
+import { alertsReport, changeAlerts, context, mark, reportPath, runReport, statusText } from "./ops.ts";
 import { query, type View, VIEWS } from "./query.ts";
 
 type Env = Record<string, string | undefined>;
@@ -25,7 +27,7 @@ export function cliPath(): { cmd: string; args: string[] } | undefined {
 	return found ? { cmd: process.execPath, args: [found] } : undefined;
 }
 
-const SUBCOMMANDS = ["status", "findings", "extract", "report", "mark", "label", "run"];
+const SUBCOMMANDS = ["status", "findings", "alerts", "extract", "report", "mark", "label", "run"];
 
 /** The shipped analysis scripts (`scripts/<name>.mjs`) `/evals run` offers, with what each is for. */
 export const SCRIPTS: Record<string, string> = {
@@ -63,7 +65,7 @@ function parseFlags(args: string[]) {
 	return out;
 }
 
-export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; now?: () => number } = {}) {
+export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; now?: () => number; onAlertCheck?: (done: Promise<void>) => void } = {}) {
 	const env = options.env ?? process.env;
 	const spawnFn = options.spawnExtract ?? spawn;
 	return function evals(pi: ExtensionAPI): void {
@@ -78,6 +80,23 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 			try {
 				if (ctx.hasUI) ctx.ui.notify(`pi-evals settings: ${ctx0.settings.error}`, "warning");
 			} catch {}
+		});
+		// A change alert: one line at a main session's start, after the start returns, read off the extracted store.
+		pi.on("session_start", (_event, ctx) => {
+			if (!ctx.hasUI || !ctx0.settings.changeAlerts) return;
+			let file: string | undefined;
+			try {
+				file = ctx.sessionManager.getSessionFile?.();
+			} catch {}
+			if (file && logicalIdOf(file)) return;
+			const done = new Promise<void>((resolve) => setImmediate(resolve)).then(async () => {
+				const now = (options.now ?? Date.now)();
+				const state = await changeAlerts(env, now, { skipStale: true });
+				const first = state.status === "fresh" ? state.pending[0] : undefined;
+				if (!first || !recordShown(ctx0.layout.alerts, first, new Date(now).toISOString())) return;
+				ctx.ui.notify(alertLine(first, uiLocale(env, ctx0.settings.locale), state.pending.length - 1), "warning");
+			}).catch(() => {});
+			options.onAlertCheck?.(done);
 		});
 		let running: Promise<void> | undefined;
 
@@ -125,7 +144,7 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 		};
 
 		pi.registerCommand("evals", {
-			description: "Usage and process records: /evals [status|findings|extract|report|mark <note>|label|run <script>]",
+			description: "Usage and process records: /evals [status|findings|alerts|extract|report|mark <note>|label|run <script>]",
 			getArgumentCompletions: (prefix: string) => {
 				if (prefix.startsWith("run ")) {
 					const names = Object.keys(SCRIPTS).filter((n) => n.startsWith(prefix.slice(4)));
@@ -142,6 +161,8 @@ export function createEvals(options: { env?: Env; spawnExtract?: typeof spawn; n
 				} else if (sub === "findings") {
 					const flags = parseFlags(words.slice(1));
 					ctx.ui.notify(query("findings", { env, ...flags }), "info");
+				} else if (sub === "alerts") {
+					ctx.ui.notify(await alertsReport(env, (options.now ?? Date.now)()), "info");
 				} else if (sub === "extract") {
 					if (running) {
 						ctx.ui.notify("pi-evals: an extract is already running.", "warning");

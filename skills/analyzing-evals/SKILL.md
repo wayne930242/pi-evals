@@ -23,6 +23,8 @@ Reading `labels`: agreement counts the user's verdicts only, split into after th
 
 Reading `items`: an item is one todo task from `in_progress` to done or deleted. Subagent cost is exact; main cost is an estimate, split evenly among items in progress at the same moment, so say which part you quote. Compare only like with like (the view already separates work handed to subagents from work the main did itself); when it says "too few items to tell", say that in those words rather than reading the medians. A stall says what woke the main (`human`, `peer`, `child`, `timer`, `ci`, `device`), not why it waited; `on` names the subagent, peer session or sb wait (`W12`, `L340`, `T5`) when known.
 
+Reading a change alert (the session-start line, `/evals alerts`, or `pi-evals alerts` from a shell): it fires when a check's pass rate in the sessions after a change is at least 10 points lower than before, with z ≥ 3 and at least 20 applicable sessions a side. It names the change point that best splits the drop, so nearby changes (the `other change points` count) may share the cause. Report the counts it gives and say it is a drop worth looking into, not proof the change caused it; follow it with `process` or `by-version.mjs` for that check.
+
 Lead with what rose, fell or held steady, and give the counts behind the rates. Say “too early to tell” when a side is short or too small; when other changes landed nearby, say “we cannot tell which change mattered.” Even a clear difference is not proof of cause. More sessions or skill loads measure activity, not better work.
 
 ## When a number looks wrong

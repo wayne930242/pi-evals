@@ -12,6 +12,12 @@ export interface Settings {
 	coverageDays: number;
 	/** Days on each side of a change in the before/after comparison. */
 	impactWindowDays: number;
+	/** Sessions the detector applies to, on each side of a change, before a change alert can fire. */
+	alertMinSessions: number;
+	/** Show a change alert at session start. */
+	changeAlerts: boolean;
+	/** "zh-TW" or "en"; unset, the environment's language (LC_ALL, LC_MESSAGES, LANG). */
+	locale?: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -40,6 +46,8 @@ export function defaultSettings(env: Env = process.env): Settings {
 		changeRepos: [join(projects, "weihung-basic-agent"), join(projects, "weihung-agent-root")],
 		coverageDays: 60,
 		impactWindowDays: 7,
+		alertMinSessions: 20,
+		changeAlerts: true,
 	};
 }
 
@@ -65,6 +73,9 @@ export function loadSettings(env: Env = process.env): Settings & { error?: strin
 		if (Array.isArray(raw.changeRepos)) settings.changeRepos = raw.changeRepos.map((p) => expand(String(p), env));
 		if (typeof raw.coverageDays === "number" && raw.coverageDays > 0) settings.coverageDays = raw.coverageDays;
 		if (typeof raw.impactWindowDays === "number" && raw.impactWindowDays > 0) settings.impactWindowDays = raw.impactWindowDays;
+		if (typeof raw.alertMinSessions === "number" && Number.isInteger(raw.alertMinSessions) && raw.alertMinSessions > 0) settings.alertMinSessions = raw.alertMinSessions;
+		if (typeof raw.changeAlerts === "boolean") settings.changeAlerts = raw.changeAlerts;
+		if (raw.locale === "zh-TW" || raw.locale === "en") settings.locale = raw.locale;
 	}
 	if (env.PI_EVALS_ROOTS) settings.extraRoots.push(...env.PI_EVALS_ROOTS.split(":").filter(Boolean).map((p) => expand(p, env)));
 	return settings;
@@ -82,6 +93,8 @@ export interface Layout {
 	sessionEvals: string;
 	changes: string;
 	marks: string;
+	/** Change alerts already shown at a session start. */
+	alerts: string;
 	labels: string;
 	/** One row per /ask-ai, never the question. */
 	asks: string;
@@ -104,6 +117,7 @@ export function layout(state = stateDir()): Layout {
 		sessionEvals: join(state, "index", "session-evals.json"),
 		changes: join(state, "changes.jsonl"),
 		marks: join(state, "marks.jsonl"),
+		alerts: join(state, "alerts.jsonl"),
 		labels: join(state, "labels.jsonl"),
 		asks: join(state, "asks.jsonl"),
 		status: join(state, "index", "status.json"),
